@@ -43,16 +43,16 @@ class PipePressures:
         return
 
 class Tooltip:
-    def __init__(self, widget, text, delay=250):
+    def __init__(self, widget, text, delay=500):
         self.widget = widget
         self.text = text
-        self.delay = delay  # delay in milliseconds
+        self.delay = delay
         self.tooltip_window = None
         self.id = None
 
         self.widget.bind("<Enter>", self.schedule)
         self.widget.bind("<Leave>", self.hide)
-        self.widget.bind("<ButtonPress>", self.hide)  # hide on click
+        self.widget.bind("<ButtonPress>", self.hide)
 
     def schedule(self, event=None):
         self.unschedule()
@@ -69,7 +69,7 @@ class Tooltip:
         x = self.widget.winfo_rootx() + 20
         y = self.widget.winfo_rooty() + self.widget.winfo_height() + 1
         self.tooltip_window = tw = tk.Toplevel(self.widget)
-        tw.wm_overrideredirect(True)  # Remove window decorations
+        tw.wm_overrideredirect(True)
         tw.wm_geometry(f"+{x}+{y}")
         label = tk.Label(tw, text=self.text, justify='left',
                          background="#ffffe0", relief='solid', borderwidth=1,
@@ -82,102 +82,103 @@ class Tooltip:
             self.tooltip_window.destroy()
             self.tooltip_window = None
 
-# Create GUI root window
+# ------------------- GUI ------------------- #
 root = tk.Tk()
 root.title("Traffic Pressures on Pipes")
-root.geometry('640x480')
+root.geometry("640x480")
 
-# Add root window title and description
-lbl_title = tk.Label(root, text="Traffic Pressures on Buried Pipes", font=("Arial", 12, "bold"),
-                      justify="left", anchor="w")
-lbl_title.pack(fill="x", padx=10, pady=(10, 0))
+# Title and description
+tk.Label(root, text="Traffic Pressures on Buried Pipes",
+         font=("Arial", 12, "bold"), anchor="w", justify="left").pack(fill="x", padx=10, pady=(10,0))
 
-lbl_desc = tk.Label(root, text="Calculates traffic pressures using Boussinesq's equation and " \
-"wheel loads idealised as point loads as described in Young and Trott's 'Buried Rigid Pipes " \
-"Structural Design of Pipelines' (1984). This simplified approach neglects consideration of" \
-"pipe diameter, bedding, or tyre contact area.", wraplength=620, justify="left", anchor="w")
-lbl_desc.pack(fill="x", padx=10, pady=(0, 10))
+tk.Label(root,
+         text="Calculates traffic pressures using Boussinesq's equation and wheel loads "
+              "idealised as point loads as described in Young and Trott's 'Buried Rigid Pipes "
+              "Structural Design of Pipelines' (1984). This simplified approach neglects "
+              "consideration of pipe diameter, bedding, or tyre contact area.",
+         wraplength=620, justify="left", anchor="w").pack(fill="x", padx=10, pady=(0,10))
 
-# Frame for 'Input - Spatial Domain Parameters'
-mframe1 = tk.Frame(root, bd=1, width=60, relief="solid", padx=0, pady=0)
-mframe1.pack(fill="x", expand=True, padx=0, pady=0)
-frame1 = tk.Frame(mframe1, bd=1, relief="solid", padx=10, pady=10)
-frame1.grid(row=0, column=0, sticky="ew", pady=5)
-tk.Label(frame1, text="Input - Spatial Domain Parameters", font=("Arial", 10, "bold")).grid(
-    row=0, column=0, sticky="w")
-tk.Label(frame1, text="Input parameters defining and discretizing spatial domain over which to " \
-"calculate pressures:", justify="left").grid(row=1, column=0, sticky="w", 
-    pady=(5,0))
+# ------------------- Helper Functions ------------------- #
+def create_mframe(parent):
+    frame = tk.Frame(parent, bd=1, relief="solid", padx=0, pady=0)
+    frame.pack(fill="x", padx=10, pady=5)
+    return frame
 
-# Row 1
-frame2 = tk.Frame(mframe1, bd=1, relief="solid", padx=10, pady=0)
-frame2.grid(row=1, column=0, sticky="ew", pady=0)
-tk.Label(frame2, text="Model length along pipe (x direction):").grid(
-    row=0, column=0, sticky="w", padx=(0,10))
-entry1 = tk.Entry(frame2, width=15)
-entry1.grid(row=0, column=1, sticky="e")
-tk.Label(frame2, text="m").grid(row=0, column=2, sticky="w", padx=(5,0))
-tooltip1 = Tooltip(entry1, "Should exceed width of applied wheel or axle plus some allowance \n" \
-"for load distribution to each side of extreme point load(s)")
+def create_row(frame, label_text, tooltip_text=None, unit_text=None, entry_width=15):
+    """Create a row with label, single entry, and optional unit"""
+    row_frame = tk.Frame(frame)
+    row_frame.pack(fill="x", pady=2)
 
-# Row 2
-frame3 = tk.Frame(mframe1, bd=1, relief="solid", padx=10, pady=0)
-frame3.grid(row=2, column=0, sticky="ew", pady=0)
-tk.Label(frame3, text="Model length across pipe (y direction):").grid(
-    row=0, column=0, sticky="w", padx=(0,10))
-entry2 = tk.Entry(frame3, width=15)
-entry2.grid(row=0, column=1, sticky="e")
-tk.Label(frame3, text="m").grid(row=0, column=2, sticky="w", padx=(5,0))
-tooltip2 = Tooltip(entry2, "Should be arbitrarily small number to capture peak pressure at \n" \
-"pipe crown, 0.1m is recommended")
+    label = tk.Label(row_frame, text=label_text, anchor="w", justify="left", width=35)
+    label.grid(row=0, column=0, sticky="w")
 
-# Row 3
-frame4 = tk.Frame(mframe1, bd=1, relief="solid", padx=10, pady=0)
-frame4.grid(row=3, column=0, sticky="ew", pady=0)
-tk.Label(frame4, text="Model depth (z direction):").grid(
-    row=0, column=0, sticky="w", padx=(0,10))
-entry3 = tk.Entry(frame4, width=15)
-entry3.grid(row=0, column=1, sticky="e")
-tk.Label(frame4, text="m   to ").grid(row=0, column=2, sticky="w", padx=(5,0))
-entry4 = tk.Entry(frame4, width=15)
-entry4.grid(row=0, column=3)
-tk.Label(frame4, text="m").grid(row=0, column=4, sticky="w", padx=(5,0))
-tooltip3 = Tooltip(entry3, "Minimum depth, recommended not less than 0.5m")
-tooltip4 = Tooltip(entry4, "Maximum depth")
+    entry = tk.Entry(row_frame, width=entry_width)
+    entry.grid(row=0, column=1, sticky="e")
+    if tooltip_text:
+        Tooltip(entry, tooltip_text)
 
-# Configure alignment
-for frame in [frame1, frame2, frame3, frame4]:
-    frame.grid_columnconfigure(0, weight=1)  # label column stretches
-    frame.grid_columnconfigure(1, weight=0)  # entry fixed width
-    frame.grid_columnconfigure(2, weight=0)  # units fixed width
-    frame.grid_columnconfigure(3, weight=0)  # units fixed width
-    frame.grid_columnconfigure(4, weight=0)  # units fixed width
+    if unit_text:
+        tk.Label(row_frame, text=unit_text, anchor="w").grid(row=0, column=2, sticky="w", padx=(5,0))
 
-# Frame for 'Input - Wheel Loads'
-mframe2 = tk.Frame(root, bd=1, relief="solid", padx=0, pady=0)
-mframe2.pack(fill="x", expand=True, padx=0, pady=0)
-frame5 = tk.Frame(mframe2, bd=1, relief="solid", padx=10, pady=10)
-frame5.grid(row=0, column=0, sticky="ew", pady=5)
-tk.Label(frame5, text="Input - Wheel Loading", font=("Arial", 10, "bold")).grid(
-    row=0, column=0, sticky="w")
-tk.Label(frame5, text="Input wheel loads as a system of point loads. Patch loading can be " \
-"approximated by discretising into a set of point loads.", wraplength=620, justify="left").grid(
-    row=1, column=0, sticky="w", pady=(5,0))
+    # Make label stretch, entry fixed
+    row_frame.grid_columnconfigure(0, weight=1)
+    row_frame.grid_columnconfigure(1, weight=0)
 
-frame5 = tk.Frame(mframe2, bd=1, relief="solid", padx=10, pady=0)
-frame5.grid(row=1, column=0, sticky="ew", pady=0)
-tk.Label(frame5, text="Set of points loads as [x1, y1, P1], [x2, y2, P2], ..., " \
-"with coordinates in [m] and wheel loads as dynamic forces in [kN]").grid(
-    row=0, column=0, sticky="w", padx=(0,10))
-frame6 = tk.Frame(mframe2, bd=1, relief="solid", padx=10, pady=0)
-frame6.grid(row=2, column=0, sticky="ew", pady=0)
-tk.Label(frame6, text="Note x-y plane assumed centred on origin at (0, 0)").grid(
-    row=0, column=0, sticky="w", padx=(0,10))
-frame7 = tk.Frame(mframe2, bd=1, relief="solid", padx=10, pady=0)
-frame7.grid(row=3, column=0, sticky="ew", pady=0)
-entry5 = tk.Entry(frame7, width=100)
-entry5.grid(row=0, column=3)
+    return entry
 
+# ------------------- Spatial Domain ------------------- #
+mframe1 = create_mframe(root)
+tk.Label(mframe1, text="Input - Spatial Domain Parameters",
+         font=("Arial", 10, "bold")).pack(anchor="w", pady=(0,5))
+
+tk.Label(mframe1, text="Input parameters defining and discretizing spatial domain over which to calculate pressures:",
+         wraplength=600, justify="left").pack(anchor="w", pady=(0,5))
+
+# Rows
+entry1 = create_row(mframe1,
+                    "Model length along pipe (x direction):",
+                    "Should exceed width of applied wheel or axle plus some allowance\nfor load distribution to each side of extreme point load(s)",
+                    "m")
+entry2 = create_row(mframe1,
+                    "Model length across pipe (y direction):",
+                    "Should be arbitrarily small number to capture peak pressure at pipe crown, 0.1m is recommended",
+                    "m")
+entry3 = create_row(mframe1,
+                    "Minimum depth (z direction):",
+                    "Recommended not less than 0.5m",
+                    "m")
+entry4 = create_row(mframe1,
+                    "Maximum depth (z direction):",
+                    "",
+                    "m")
+entry5 = create_row(mframe1,
+                    "Number of x divisions for discretization:",
+                    "",
+                    "   ")
+entry6 = create_row(mframe1,
+                    "Number of y divisions for discretization:",
+                    "Recommended value of 1 since should be small",
+                    "   ")
+entry7 = create_row(mframe1,
+                    "Number of z divisions for discretization:",
+                    "",
+                    "   ")
+
+# ------------------- Wheel Loads ------------------- #
+mframe2 = create_mframe(root)
+tk.Label(mframe2, text="Input - Wheel Loading", font=("Arial", 10, "bold")).pack(anchor="w", pady=(0,5))
+tk.Label(mframe2, text="Input wheel loads as a system of point loads. Patch loading can be approximated by discretising into a set of point loads.",
+         wraplength=600, justify="left").pack(anchor="w", pady=(0,5))
+
+# Wide single-row Entry for multiple points
+entry8 = tk.Frame(mframe2)
+entry8.pack(fill="x", pady=2)
+tk.Label(entry8, text="Set of point loads as [x1, y1, P1], [x2, y2, P2], ...",
+         anchor="w", justify="left").grid(row=0, column=0, sticky="w", padx=(0,5))
+entry5 = tk.Entry(entry8)
+entry5.grid(row=0, column=1, sticky="ew")  # expand horizontally
+entry8.grid_columnconfigure(1, weight=1)  # make entry expand
+tk.Label(mframe2, text="Note: x-y plane assumed centered on origin at (0,0)").pack(anchor="w", pady=(2,2))
 
 root.mainloop()
 

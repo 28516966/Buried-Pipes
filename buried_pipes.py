@@ -1,10 +1,12 @@
 import csv
 import json
 import math
-import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 import tkinter as tk
+from tkinter import ttk
 from tkinter import filedialog
 
 class PipePressures:
@@ -26,11 +28,14 @@ class PipePressures:
             zmin (float, optional): Minimum depth [m]. Defaults to 0.5.
         """
         # generate 3d spatial mesh for calculation of pressures
-        xinc = x / xdivs
-        yinc = y / ydivs
-        zinc = z / zdivs
-        xmin = - x/2 + xinc/2
-        ymin = - y/2 + yinc/2
+        self.xdivs = xdivs
+        self.ydivs = ydivs
+        self.zdivs = zdivs
+        self.xinc = x / xdivs
+        self.yinc = y / ydivs
+        self.zinc = z / zdivs
+        xmin = - x/2 + self.xinc/2
+        ymin = - y/2 + self.yinc/2
         self.x_arr = np.linspace(xmin, -xmin, xdivs)
         self.y_arr = np.linspace(ymin, -ymin, ydivs)
         self.z_arr = np.linspace(zmin, z, zdivs)
@@ -68,7 +73,13 @@ class PipePressures:
                     # print("z =", iz, "y =", iy, "x =", ix, "sigz =", sig_z)
         return
     
-    def result_Ps(self, avg_length_over):
+    def design_pressure_Ps(self, avg_len):
+        """Calculates design traffic surcharge pressure, Ps [kPa], by averaging pressures calculated
+        for different elements over some length.
+
+        Args:
+            avg_len (float): Length over which to take average pressure [m].
+        """
         # need to find y value for row of concern
         # need to iterate results array and for each z value calculate average x over given length
         # record maximum and save to results array
@@ -76,20 +87,26 @@ class PipePressures:
         # Identify central y row of concern to perform averaging on
         y_arr_len = len(self.y_arr)
         if y_arr_len % 2 != 0: # if number of points is odd, central y=0
-            y_pos = y_arr_len / 2   
+            y_pos = int((y_arr_len - 1) / 2)
         else: # else use nearest row in +y
-            y_pos = (y_arr_len + 1) / 2
-        y_val = self.y_arr[y_pos]
-
-        # Determine number of elements along x requiring averaging
-        
-
-
-        for iz in self.z_arr:
-            #for each depth iterate results 
-
-
-
+            y_pos = int(y_arr_len / 2)
+        # Determine number of elements along x comprising length to average over
+        avg_x_num = round(avg_len / self.xinc) # number of elements comprising average
+        x_pos_num = len(self.x_arr) - avg_x_num + 1 # number of positions to take average at
+        for i in range(0, len(self.z_arr)): # for each z value
+            i_z_ini = i * self.ydivs * self.xdivs
+            i_x_ini = i_z_ini + (y_pos * self.xdivs)
+            max_p = 0
+            for j in range(0, x_pos_num): # for each position to calculate average
+                tot_p = 0
+                for k in range(0, avg_x_num): # for each node in length to average
+                    row_index = i_x_ini + j + k
+                    row = self.results_pressures[row_index]
+                    tot_p += row[3]
+                avg_p = tot_p / avg_x_num
+                if max_p < avg_p:
+                    max_p = avg_p
+            self.results_Ps.append([self.z_arr[i], max_p])
         return
 
 def solve():
@@ -98,7 +115,7 @@ def solve():
     try:
         solution.clear()
     except:
-        print("No existing solution to clear")
+        pass
     solution = PipePressures()
     # Read spatial parameters and discretize mesh
     x = float(row1.get())
@@ -114,7 +131,9 @@ def solve():
     solution.wheel_loads(loads)
     # Solve
     solution.boussinesq_pressure()
-    solution.result_Ps()
+    solution.design_pressure_Ps(float(row12.get()))
+    # Populate drop-box for plotting
+    combobox14['values'] = solution.z_arr.tolist()
     return
 
 def save_pressures():
@@ -147,8 +166,55 @@ def save_traffic_surcharge():
     with open(file_path, mode='w', newline='') as csv_file:
         writer = csv.writer(csv_file)
         writer.writerow(["Z [m]", "Ps [kPa]"])
-        for row in solution.results:
-            writer.writerow()
+        for row in solution.results_Ps:
+            writer.writerow(row)
+    return
+
+def plot_results(z):
+    global solution
+    np_results_Ps = np.asarray(solution.results_Ps)
+    val_z = np_results_Ps[:, 0]
+    val_Ps = np_results_Ps[:, 1]
+
+    np_res_p = np.asarray(solution.results_pressures)
+    val_x = solution.x_arr
+    val_y = solution.y_arr
+    val_X, val_Y = np.meshgrid(val_x, val_y)
+    
+    # res = np_res_p[np.isclose(np_res_p[:, 0], z)]
+    res = np_res_p[np_res_p[:, 0] == z]
+    val_Z = np.zeros_like(val_X, dtype=float)
+    for row in range(val_X.shape[0]):
+        for col in range(val_X.shape[1]):
+            for j in res:
+                if (val_X[row, col] == j[2]) and (val_Y[row, col] == j[1]):
+                    val_Z[row, col] = j[3]
+                    break
+
+    global fig
+    fig.clear()
+    ax1 = fig.add_subplot(1, 2, 1)
+    ax2 = fig.add_subplot(1, 2, 2, projection='3d')
+    ax1.plot(val_Ps, val_z, color="blue", linewidth=2, linestyle="-", marker="*")
+    ax1.set_title("Design Surcharge Pressure Ps with Depth")
+    ax1.set_xlabel("Surcharge Pressure, Ps [kPa]")
+    ax1.set_ylabel("Depth, z [m]")
+    ax1.invert_yaxis()
+    ax1.minorticks_on()
+    ax1.grid(which='major',
+            linestyle='-',
+            linewidth=0.8,
+            color='gray')
+    ax1.grid(which='minor',
+            linestyle=':',
+            linewidth=0.5,
+            color='lightgray')
+    ax2.plot_surface(val_X, val_Y, val_Z, cmap="viridis")
+    ax2.set_title("Boussinesq Pressures at Specified Depth")
+    ax2.set_xlabel("x [m]")
+    ax2.set_ylabel("y [m]")
+    ax2.set_zlabel("Boussinesq Pressure [kPa]")
+    plotcanvas.draw()
     return
 
 class Tooltip:
@@ -331,36 +397,70 @@ row12 = create_row(mframe3,
 
 frame9 = tk.Frame(mframe3)
 frame9.pack(fill="x", pady=2)
-button1 = tk.Button(frame9, text="Solve for Pressures & Traffic Surcharge", command=solve)
-button1.grid(row=0, column=0, sticky="ew")
+button9 = tk.Button(frame9, text="Solve for Pressures & Traffic Surcharge", command=solve)
+button9.grid(row=0, column=0, sticky="ew")
 frame9.rowconfigure(0, weight=1)
 frame9.columnconfigure(0, weight=1)
 
 frame10 = tk.Frame(mframe3)
 frame10.pack(fill="x", pady=2)
-button2 = tk.Button(frame10, text="Save Pressures to File", command=save_pressures)
-button2.grid(row=0, column=0, sticky="ew")
+button10 = tk.Button(frame10, text="Save Pressures to File", command=save_pressures)
+button10.grid(row=0, column=0, sticky="ew")
 frame10.rowconfigure(0, weight=1)
 frame10.columnconfigure(0, weight=1)
 
+frame13 = tk.Frame(mframe3)
+frame13.pack(fill="x", pady=2)
+button13 = tk.Button(frame13, text="Save Traffic Surcharge Ps to File", command=save_traffic_surcharge)
+button13.grid(row=0, column=0, sticky="ew")
+frame13.rowconfigure(0, weight=1)
+frame13.columnconfigure(0, weight=1)
+
+frame14 = tk.Frame(mframe3)
+frame14.pack(fill="x", pady=2)
+label14 = tk.Label(frame14, text="Plot pressures on x-y plane at depth:", anchor="w", 
+                   justify="left", width=35)
+label14.grid(row=0, column=0, sticky="w")
+combobox14 = ttk.Combobox(frame14)
+combobox14.grid(row=0, column=1, sticky="e")
+tk.Label(frame14, text="m", anchor="w").grid(row=0, column=2, sticky="w", padx=(5,0))
+frame14.grid_columnconfigure(0, weight=1)
+frame14.grid_columnconfigure(1, weight=0)
 
 
-# return results in Z, Y, X, pressure
+def on_plot():
+    value = combobox14.get()
+    if not value:
+        return
+    plot_results(float(value))
 
+frame15 = tk.Frame(mframe3)
+frame15.pack(fill="x", pady=2)
+button15 = tk.Button(frame15, text="Generate Results Plots", 
+                     command=on_plot)
+button15.grid(row=0, column=0, sticky="ew")
+frame15.rowconfigure(0, weight=1)
+frame15.columnconfigure(0, weight=1)
+
+fig = Figure(figsize=(8, 8))
+ax = fig.add_subplot(111)
+plotcanvas = FigureCanvasTkAgg(fig, master=mframe3)
+plotcanvas.draw()
+plotcanvas.get_tk_widget().pack(fill="both", expand=True)
 
 root.mainloop()
 
-print(solution.lib_load_points["userinput"])
 
-""" a = "[[-0.45, 0, 60], [0.45, 0, 60]]"
-b = json.loads(a)
-print(b) """
-
-""" solve = PipePressures()
-solve.mesh(1, 0.1, 2, 10, 1 , 16)
-solve.load_points("Field", [[-0.45, 0, 60], [0.45, 0, 60]])
-solve.boussinesq_pressure("Field") 
-# 60kN on 0.4m squares at 0.9m centres
-# 45deg 150mm pavement, 30deg thereafter """
-
-
+""" solution = PipePressures()
+solution.mesh(2, 0.1, 2, 8, 3, 3, zmin=0.5)
+solution.wheel_loads([[-0.45, 0, 60], [0.45, 0, 60]])
+solution.boussinesq_pressure()
+solution.design_pressure_Ps(1)
+fig = plot_results(0.5)
+plt.show(block=True)
+ """
+# to do list
+# 1) verify results, seemingly good agreement with field loading
+# 2) add popup box with copyable load information
+# 3) add calculator allowing tyre pressures to be used to define patch loads
+# which are then discretized into a set of point loads

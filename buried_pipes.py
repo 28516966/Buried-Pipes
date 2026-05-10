@@ -15,7 +15,7 @@ class PipePressures:
         self.results_pressures = []
         self.results_Ps = []
     def mesh(self, x, y, z, xdivs, ydivs, zdivs, zmin=0.5):
-        """Defines parameters for spatial discretization into a series of nodes for which to solve
+        """Defines parameters for spatial discretisation into a series of nodes for which to solve
         Boussinesq earth pressures at.
 
         Args:
@@ -54,7 +54,7 @@ class PipePressures:
         return
 
     def boussinesq_pressure(self, load_name="userinput"):
-        """Calculate Boussinesq pressures across discretized spatial coordinates for named load
+        """Calculate Boussinesq pressures across discretised spatial coordinates for named load
         case.
 
         Args:
@@ -117,7 +117,7 @@ def solve():
     except:
         pass
     solution = PipePressures()
-    # Read spatial parameters and discretize mesh
+    # Read spatial parameters and discretise mesh
     x = float(row1.get())
     y = float(row2.get())
     z = float(row3.get())
@@ -215,6 +215,110 @@ def plot_results(z):
     ax2.set_ylabel("y [m]")
     ax2.set_zlabel("Boussinesq Pressure [kPa]")
     plotcanvas.draw()
+    return
+
+def discretise_wheel(load, pressure, x=0, y=0, r1r2=0.5):
+    area = load / pressure
+    r2 = (area / math.pi) ** 0.5
+    r1 = r1r2 * r2
+    a_quad = 0.25 * math.pi * r1**2
+    y_quad = 4 * r1 / (3 * math.pi)
+    p_quad = a_quad / area * load
+    alpha = 2 * math.pi / 12
+    a_sect = alpha * (r2**2 - r1**2)
+    y_sect = 2 * math.sin(alpha) * (r2**3 - r1**3) / (3 * alpha * (r2**2 - r1**2))
+    x1_sect = y_sect * math.cos(alpha)
+    y1_sect = y_sect * math.cos(alpha)
+    p_sect = a_sect / area * load
+    return [[x + y_quad, y + y_quad, p_quad], [x - y_quad, y + y_quad, p_quad], 
+            [x - y_quad, y - y_quad, p_quad], [x + y_quad, y - y_quad, p_quad], 
+            [x + x1_sect, y + y1_sect, p_sect], [x, y + y_sect, p_sect],
+            [x - x1_sect, y + y1_sect, p_sect], [x - x1_sect, y - y1_sect, p_sect],
+            [x, y - y_sect, p_sect], [x + x1_sect, y - y1_sect, p_sect]]
+
+def convert_patch_loads(widget, wheel_loads, contact_pressure):
+    output = []
+    print("wheelloads", wheel_loads)
+    for wheel in wheel_loads:
+        output.extend(discretise_wheel(wheel[2], contact_pressure, x=wheel[0], 
+                                       y=wheel[1]))
+    widget.delete("1.0", "end")
+    widget.insert("1.0", str(output))
+    return
+
+def show_load_dialog():
+    popup = tk.Toplevel()
+    popup.title("Wheel Load Calculator")
+    
+    # Make the window modal
+    popup.grab_set()
+    
+    # Text widget (read-only)
+    p_frame1 = tk.Frame(popup)
+    p_frame1.pack(fill="both", expand=True, padx=10, pady=(10,5))
+    p_text1 = tk.Text(p_frame1, wrap="word", width=60, height=10)
+    p_text1.tag_configure("bold", font=("Arial", 10, "bold"))
+    p_text1.tag_configure("normal", font=("Arial", 10))
+    p_text1.insert("1.0", "Historic Loading\n", "bold")
+    p_text1.insert("end", 
+    "Main road loading - HB loading: static wheel of 112.5 kN including impact, contact " \
+    "pressure 1100 kPa\n\n" \
+    "Light road loading - two wheels 0.9 m apart, static weight 70 kN, impact factor of 1.5 " \
+    "giving dynamic weight 105 kN, contact pressure 700 kPa\n" \
+    "[[-0.45, 0, 105], [0.45, 0, 105]]\n\n" 
+    "Field loading - two wheels 0.9 m apart, static weight 30 kN, impact factor of 2 giving " \
+    "dynamic wheel load of 60 kN, contact pressure 400 kPa\n" \
+    "[[-0.45, 0, 60], [0.45, 0, 60]]\n\n", "normal")
+    p_text1.config(state="disabled")  # make read-only but still selectable
+    p_text1.pack(padx=10, pady=10, side="left", fill="both", expand=True)
+    
+    # Add a scrollbar
+    p_scrollbar1 = ttk.Scrollbar(p_frame1, orient="vertical", command=p_text1.yview)
+    p_text1.config(yscrollcommand=p_scrollbar1.set)
+    p_scrollbar1.pack(side="right", fill="y")
+    
+    # Add inputs
+    p_frame2 = tk.Frame(popup)
+    p_frame2.pack(fill="x", padx=10, pady=(5,10))
+    tk.Label(p_frame2, text="Wheel loading to discretise:").pack(side="left")
+    p_entry2 = tk.Entry(p_frame2)
+    p_entry2.pack(side="right", fill="x", expand=True, padx=5)
+    
+    p_frame3 = tk.Frame(popup)
+    p_frame3.pack(fill="x", padx=10, pady=(5,10))
+    tk.Label(p_frame3, text="Contact pressure for wheels [kPa]").pack(side="left")
+    p_entry3 = tk.Entry(p_frame3, width=15)
+    p_entry3.pack(side="right", padx=5)
+
+    p_frame4 = tk.Frame(popup)
+    p_frame4.pack(fill="x", pady=2)
+    p_button4 = tk.Button(p_frame4, text="Discretize wheel patch loading into set of 10 point " \
+    "loads", command=lambda: convert_patch_loads(
+        p_text5, json.loads(p_entry2.get()), float(p_entry3.get())))
+    p_button4.grid(row=0, column=0, sticky="ew")
+    p_frame4.rowconfigure(0, weight=1)
+    p_frame4.columnconfigure(0, weight=1)
+
+    p_frame5 = tk.Frame(popup)
+    p_frame5.pack(fill="both", expand=True, padx=10, pady=(10,5))
+    p_text5 = tk.Text(p_frame5, wrap="word", width=60, height=10)
+    p_text5.tag_configure("normal", font=("Arial", 10))
+    p_text5.insert("1.0", "Results Will Display Here", "normal")
+    p_text5.pack(padx=10, pady=10, side="left", fill="both", expand=True)
+
+    # Close button
+    btn = ttk.Button(popup, text="Close", command=popup.destroy)
+    btn.pack(pady=(0,10))
+    
+    # Center the popup over root
+    popup.update_idletasks()
+    w = popup.winfo_width()
+    h = popup.winfo_height()
+    ws = popup.winfo_screenwidth()
+    hs = popup.winfo_screenheight()
+    x = (ws // 2) - (w // 2)
+    y = (hs // 2) - (h // 2)
+    popup.geometry(f"{w}x{h}+{x}+{y}")
     return
 
 class Tooltip:
@@ -327,7 +431,7 @@ mframe1 = create_mframe(scrollframe)
 tk.Label(mframe1, text="Input - Spatial Domain Parameters",
          font=("Arial", 10, "bold"), anchor="w", justify="left").pack(fill="x", pady=(0,5))
 
-tk.Label(mframe1, text="Input parameters defining and discretizing spatial domain over which to " \
+tk.Label(mframe1, text="Input parameters defining and discretising spatial domain over which to " \
 "calculate pressures:", wraplength=600, anchor="w", justify="left").pack(fill="x", pady=(0,5))
 
 # Rows
@@ -338,8 +442,8 @@ row1 = create_row(mframe1,
                     "m")
 row2 = create_row(mframe1,
                     "Model length across pipe (y direction):",
-                    "Should be arbitrarily small number to capture peak pressure at pipe crown, " \
-                    "0.1m is recommended",
+                    "Should be arbitrarily small number to capture peak pressure at \npipe crown, " \
+                    "0.3m is recommended (3 number 0.1m elements)",
                     "m")
 row3 = create_row(mframe1,
                     "Minimum depth (z direction):",
@@ -350,15 +454,16 @@ row4 = create_row(mframe1,
                     "",
                     "m")
 row5 = create_row(mframe1,
-                    "Number of x divisions for discretization:",
-                    "",
+                    "Number of x divisions for discretisation:",
+                    "At least 10 elements per metre is recommended",
                     "   ")
 row6 = create_row(mframe1,
-                    "Number of y divisions for discretization:",
-                    "Recommended value of 1 since should be small",
+                    "Number of y divisions for discretisation:",
+                    "3 elements is recommended to enable pressure surface plotting, \nnote only central " \
+                    "row of elements is used to calculate Ps",
                     "   ")
 row7 = create_row(mframe1,
-                    "Number of z divisions for discretization:",
+                    "Number of z divisions for discretisation:",
                     "",
                     "   ")
 
@@ -369,6 +474,15 @@ tk.Label(mframe2, text="Input - Wheel Loading", font=("Arial", 10, "bold"), anch
 tk.Label(mframe2, text="Input wheel loads as a system of dynamic point loads. Patch loading " \
 "can be approximated by discretising into a set of point loads.", wraplength=600, anchor="w",
 justify="left").pack(fill="x", pady=(0,5))
+
+frame16 = tk.Frame(mframe2)
+frame16.pack(fill="x", pady=2)
+button16 = tk.Button(frame16, text="Reference Wheel Loads and Patch Load Conversion Calculator", 
+                     command=show_load_dialog)
+button16.grid(row=0, column=0, sticky="ew")
+frame16.rowconfigure(0, weight=1)
+frame16.columnconfigure(0, weight=1)
+
 frame8 = tk.Frame(mframe2)
 frame8.pack(fill="x", pady=2)
 tk.Label(frame8, text="Set of point loads as [x1, y1, P1], [x2, y2, P2], ...",
@@ -449,18 +563,3 @@ plotcanvas.draw()
 plotcanvas.get_tk_widget().pack(fill="both", expand=True)
 
 root.mainloop()
-
-
-""" solution = PipePressures()
-solution.mesh(2, 0.1, 2, 8, 3, 3, zmin=0.5)
-solution.wheel_loads([[-0.45, 0, 60], [0.45, 0, 60]])
-solution.boussinesq_pressure()
-solution.design_pressure_Ps(1)
-fig = plot_results(0.5)
-plt.show(block=True)
- """
-# to do list
-# 1) verify results, seemingly good agreement with field loading
-# 2) add popup box with copyable load information
-# 3) add calculator allowing tyre pressures to be used to define patch loads
-# which are then discretized into a set of point loads

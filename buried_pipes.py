@@ -51,7 +51,7 @@ class PipePressures:
         return
 
     def wheel_loads(self, wheel_loads, load_name="userinput"):
-        """_summary_
+        """Associates wheel load with class object and adds to library
 
         Args:
             wheel_loads: List of lists in format [x, y, P] i.e. coordinates in [m] and point load
@@ -324,6 +324,14 @@ def discretise_wheel(load, pressure, x=0, y=0, r1r2=0.5):
             [x, y - y_sect, p_sect], [x + x1_sect, y - y1_sect, p_sect]]
 
 def convert_patch_loads(widget, wheel_loads, contact_pressure):
+    """Runs input wheel loads through discretise_wheel() function and adds results to GUI window
+    for user to copy
+
+    Args:
+        widget: text widget to edit with output
+        wheel_loads: list of lists, see discretise_wheel() for more information
+        contact_pressure (kPa): contact pressure for determination of patch load
+    """
     output = []
     print("wheelloads", wheel_loads)
     for wheel in wheel_loads:
@@ -334,6 +342,9 @@ def convert_patch_loads(widget, wheel_loads, contact_pressure):
     return
 
 def show_load_dialog():
+    """Create popup window enabling further discretisation of wheel loads and giving information
+    on different traffic loading
+    """
     popup = tk.Toplevel()
     popup.title("Wheel Load Calculator")
     
@@ -407,7 +418,7 @@ def show_load_dialog():
     p_frame4 = tk.Frame(popup)
     p_frame4.pack(fill="x", pady=2)
     p_button4 = tk.Button(p_frame4, text="Discretize wheel patch loading into set of 10 point " \
-    "loads", command=lambda: convert_patch_loads(
+    "loads (assuming circular contact patch)", command=lambda: convert_patch_loads(
         p_text5, json.loads(p_entry2.get()), float(p_entry3.get())))
     p_button4.grid(row=0, column=0, sticky="ew")
     p_frame4.rowconfigure(0, weight=1)
@@ -526,6 +537,7 @@ tk.Label(scrollframe,
 # ==============================================================================
 
 def create_mframe(parent):
+    """Create a frame"""
     frame = tk.Frame(parent, bd=1, relief="solid", padx=0, pady=0)
     frame.pack(fill="x", padx=10, pady=5)
     return frame
@@ -716,7 +728,6 @@ plotcanvas16 = FigureCanvasTkAgg(fig16, master=mframe3)
 plotcanvas16.draw()
 plotcanvas16.get_tk_widget().pack(fill="both", expand=True)
 
-
 # Default values
 row1.insert(0, "2")
 row2.insert(0, "0.3")
@@ -727,5 +738,6 @@ row6.insert(0, "3")
 row7.insert(0, "16")
 entry8.insert(0, "[[-0.45, 0, 60], [0.45, 0, 60]]")
 row12.insert(0, "1")
+
+# Create root window
 root.mainloop()
-# to do: add other plots, log plot of Ps, surface pressures in x-z plane

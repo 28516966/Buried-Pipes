@@ -180,6 +180,12 @@ def save_traffic_surcharge():
     return
 
 def plot_results(y, z):
+    """Plots results of design traffic surcharge Ps and boussinesq pressures
+
+    Args:
+        y (float): y coordinate for X-Z slice
+        z (float): Z coordinate for X-Y slice
+    """
     # Extract results
     global solution
     np_results_Ps = np.asarray(solution.results_Ps)

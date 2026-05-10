@@ -1,13 +1,23 @@
+# ==============================================================================
+# Imports
+# ==============================================================================
 import csv
 import json
 import math
+import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from mpl_toolkits.mplot3d import Axes3D
+from matplotlib.ticker import FixedLocator, FormatStrFormatter, NullFormatter
+from matplotlib.widgets import Slider
 import numpy as np
 import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog
+
+# ==============================================================================
+# Class for Model Parameters and Methods
+# ==============================================================================
 
 class PipePressures:
     def __init__(self):
@@ -27,7 +37,6 @@ class PipePressures:
             zdivs (int): Number of divisions in z
             zmin (float, optional): Minimum depth [m]. Defaults to 0.5.
         """
-        # generate 3d spatial mesh for calculation of pressures
         self.xdivs = xdivs
         self.ydivs = ydivs
         self.zdivs = zdivs
@@ -49,7 +58,6 @@ class PipePressures:
                 in [kN] describing wheel loads on ground surface at z = 0.
             load_name (str, optional): Name for load case. Defaults to "userinput".
         """
-        # define wheel loads along axle as point loads
         self.lib_load_points[load_name] = wheel_loads
         return
 
@@ -80,10 +88,6 @@ class PipePressures:
         Args:
             avg_len (float): Length over which to take average pressure [m].
         """
-        # need to find y value for row of concern
-        # need to iterate results array and for each z value calculate average x over given length
-        # record maximum and save to results array
-
         # Identify central y row of concern to perform averaging on
         y_arr_len = len(self.y_arr)
         if y_arr_len % 2 != 0: # if number of points is odd, central y=0
@@ -108,6 +112,10 @@ class PipePressures:
                     max_p = avg_p
             self.results_Ps.append([self.z_arr[i], max_p])
         return
+
+# ==============================================================================
+# Functions Called By GUI to Produce & Manipulate Results
+# ==============================================================================
 
 def solve():
     """Takes inputs from GUI and creates an instance of class 'PipePressures' to solve"""
@@ -134,6 +142,7 @@ def solve():
     solution.design_pressure_Ps(float(row12.get()))
     # Populate drop-box for plotting
     combobox14['values'] = solution.z_arr.tolist()
+    combobox17['values'] = solution.y_arr.tolist()
     return
 
 def save_pressures():
@@ -170,18 +179,18 @@ def save_traffic_surcharge():
             writer.writerow(row)
     return
 
-def plot_results(z):
+def plot_results(y, z):
+    # Extract results
     global solution
     np_results_Ps = np.asarray(solution.results_Ps)
+    np_res_p = np.asarray(solution.results_pressures)
+
+    # Set up fig15
     val_z = np_results_Ps[:, 0]
     val_Ps = np_results_Ps[:, 1]
-
-    np_res_p = np.asarray(solution.results_pressures)
     val_x = solution.x_arr
     val_y = solution.y_arr
     val_X, val_Y = np.meshgrid(val_x, val_y)
-    
-    # res = np_res_p[np.isclose(np_res_p[:, 0], z)]
     res = np_res_p[np_res_p[:, 0] == z]
     val_Z = np.zeros_like(val_X, dtype=float)
     for row in range(val_X.shape[0]):
@@ -190,15 +199,14 @@ def plot_results(z):
                 if (val_X[row, col] == j[2]) and (val_Y[row, col] == j[1]):
                     val_Z[row, col] = j[3]
                     break
-
-    global fig
-    fig.clear()
-    ax1 = fig.add_subplot(1, 2, 1)
-    ax2 = fig.add_subplot(1, 2, 2, projection='3d')
+    global fig15
+    fig15.clear()
+    ax1 = fig15.add_subplot(1, 2, 1)
+    ax2 = fig15.add_subplot(1, 2, 2, projection='3d')
     ax1.plot(val_Ps, val_z, color="blue", linewidth=2, linestyle="-", marker="*")
     ax1.set_title("Design Surcharge Pressure Ps with Depth")
-    ax1.set_xlabel("Surcharge Pressure, Ps [kPa]")
-    ax1.set_ylabel("Depth, z [m]")
+    ax1.set_xlabel("Surcharge Pressure [kPa], Ps")
+    ax1.set_ylabel("Depth [m], z")
     ax1.invert_yaxis()
     ax1.minorticks_on()
     ax1.grid(which='major',
@@ -210,14 +218,93 @@ def plot_results(z):
             linewidth=0.5,
             color='lightgray')
     ax2.plot_surface(val_X, val_Y, val_Z, cmap="viridis")
-    ax2.set_title("Boussinesq Pressures at Specified Depth")
+    ax2.set_title("Boussinesq Pressures Across X-Y Plane at Specified Depth")
     ax2.set_xlabel("x [m]")
     ax2.set_ylabel("y [m]")
     ax2.set_zlabel("Boussinesq Pressure [kPa]")
-    plotcanvas.draw()
+    plotcanvas15.draw()
+
+    # Set up fig16
+    val_x2 = solution.x_arr
+    val_z2 = solution.z_arr
+    val_X2, val_Y2 = np.meshgrid(val_x2, val_z2)
+    res2 = np_res_p[np_res_p[:, 1] == y]
+    val_Z2 = np.zeros_like(val_X2, dtype=float)
+    for row in range(val_X2.shape[0]):
+        for col in range(val_X2.shape[1]):
+            for j in res2: # Z, Y, X, Pressure
+                if (val_X2[row, col] == j[2]) and (val_Y2[row, col] == j[0]):
+                    val_Z2[row, col] = j[3]
+                    break
+    global fig16
+    fig16.clear()
+    ax3 = fig16.add_subplot(1, 2, 1)
+    ax4 = fig16.add_subplot(1, 2, 2, projection='3d')
+    ax3.plot(val_z, val_Ps, color="blue", linewidth=2, linestyle="-", marker="*")
+    ax3.set_title("Design Surcharge Pressure Ps with Depth")
+    ax3.set_xscale("log")
+    ax3.set_yscale("log")
+    ax3.set_xlim(0.5, 10)
+    ax3.set_ylim(5, 500)
+    x_ticks = [0.5, 1, 2, 3, 4, 5, 10]
+    y_ticks = [5, 10, 20, 30, 40, 50, 100, 200, 300, 400, 500]
+    ax3.xaxis.set_major_locator(FixedLocator(x_ticks))
+    ax3.yaxis.set_major_locator(FixedLocator(y_ticks))
+    ax3.xaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+    ax3.yaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+    ax3.set_xticks(x_ticks)
+    ax3.set_yticks(y_ticks)
+    ax3.xaxis.set_minor_locator(FixedLocator(x_ticks))
+    ax3.yaxis.set_minor_locator(FixedLocator(y_ticks))
+    ax3.xaxis.set_minor_formatter(NullFormatter())
+    ax3.yaxis.set_minor_formatter(NullFormatter())
+    ax3.set_xticks([0.6, 0.7, 0.8, 0.9, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.2, 2.4, 
+                    2.6, 2.8, 3.2, 3.4, 3.6, 3.8, 4.2, 4.4, 4.6, 4.8, 6, 7, 8, 9], minor=True)
+    ax3.set_yticks([6, 7, 8, 9, 15, 25, 35, 45, 60, 70, 80, 90, 120, 140, 160, 180, 
+                    220, 240, 260, 280, 320, 340, 360, 380, 420, 440, 460, 480], 
+                    minor=True)
+    ax3.set_xlabel("Cover Depth [m], H")
+    ax3.set_ylabel("Surcharge Pressure [kPa], Ps")
+    ax3.grid(which='major',
+            linestyle='-',
+            linewidth=0.8,
+            color='gray')
+    ax3.grid(which='minor',
+            linestyle=':',
+            linewidth=0.5,
+            color='lightgray')
+    ax4.plot_surface(val_X2, val_Y2, val_Z2, cmap="viridis")
+    ax4.set_title("Boussinesq Pressures Across X-Z Plane at Specified Y")
+    ax4.set_xlabel("x [m]")
+    ax4.set_ylabel("z [m]")
+    ax4.set_zlabel("Boussinesq Pressure [kPa]")
+    ax4.view_init(elev=30, azim=120)
+    plotcanvas16.draw()
+    # fig_py = plt.figure()
+    # ax_py = fig_py.add_subplot(111, projection='3d')
+    # ax_py.plot_surface(val_X2, val_Y2, val_Z2, cmap="viridis")
+    # ax_py.set_title("Boussinesq Pressures Across X-Z Plane at Y=0")
+    # ax_py.set_xlabel("x [m]")
+    # ax_py.set_ylabel("z [m]")
+    # ax_py.set_zlabel("Boussinesq Pressure [kPa]")
+    # plt.show() 
     return
 
+
 def discretise_wheel(load, pressure, x=0, y=0, r1r2=0.5):
+    """Converts a point wheel load and contact pressure into a patch load over a circular area, then
+    discretises this into a set of 10 point loads (4 quadrants, and 6 annular sectors)
+
+    Args:
+        load (float): Overall point load of wheel [kN]
+        pressure (float): Contact pressure [kPa]
+        x (float, optional): Position of centre of wheel [m]. Defaults to 0.
+        y (float, optional): Position of centre of wheel [m]. Defaults to 0.
+        r1r2 (float, optional): Ratio of inner quadrant radius to total radius. Defaults to 0.5.
+
+    Returns:
+        list of lists in format [x, y, P]
+    """
     area = load / pressure
     r2 = (area / math.pi) ** 0.5
     r1 = r1r2 * r2
@@ -250,8 +337,8 @@ def show_load_dialog():
     popup = tk.Toplevel()
     popup.title("Wheel Load Calculator")
     
-    # Make the window modal
-    popup.grab_set()
+    # Make the window modal - comment out to enable clicking back to root window
+    # popup.grab_set()
     
     # Text widget (read-only)
     p_frame1 = tk.Frame(popup)
@@ -259,15 +346,42 @@ def show_load_dialog():
     p_text1 = tk.Text(p_frame1, wrap="word", width=60, height=10)
     p_text1.tag_configure("bold", font=("Arial", 10, "bold"))
     p_text1.tag_configure("normal", font=("Arial", 10))
-    p_text1.insert("1.0", "Historic Loading\n", "bold")
+    p_text1.insert("1.0", "DMRB CD 533 Loading\n", "bold")
     p_text1.insert("end", 
-    "Main road loading - HB loading: static wheel of 112.5 kN including impact, contact " \
-    "pressure 1100 kPa\n\n" \
+    "Main road loading - 45 units HB loading: static wheel of 112.5 kN including impact factor of "\
+    "1.25, contact pressure 1100 kPa. Comprises eight wheels spread across two axles with wheel " \
+    "spacing 1.0m, axle spacing 1.8m. \nPosition #1 - Axles Straddling Origin:\n"
+    "[[-1.5, -0.9, 112.5], [-0.5, -0.9, 112.5], [0.5, -0.9, 112.5], [1.5, -0.9, 112.5], " \
+    "[-1.5, 0.9, 112.5], [-0.5, 0.9, 112.5], [0.5, 0.9, 112.5], [1.5, 0.9, 112.5]]\n" \
+    "Position #2 - One Axle Directly Over Origin:\n"
+    "[[-1.5, 0, 112.5], [-0.5, 0, 112.5], [0.5, 0, 112.5], [1.5, 0, 112.5], " \
+    "[-1.5, 1.8, 112.5], [-0.5, 1.8, 112.5], [0.5, 1.8, 112.5], [1.5, 1.8, 112.5]]\n\n" \
+    "Field loading - two wheels 1.0 m apart, static weight 30 kN, impact factor of 2 giving " \
+    "dynamic wheel load of 60 kN, (contact pressure assumed 400 kPa):\n" \
+    "[[-0.5, 0, 60], [0.5, 0, 60]]\n\n" \
+    "Filter drain loading - 30 units HB loading (62.5 kN wheel load), however, considering only " \
+    "two wheels with an increased dynamic factor for total wheel load 87.5 kN:\n"
+    "[[-0.5, 0, 87.5], [0.5, 0, 87.5]]\n\n", "normal")
+    p_text1.insert("end", "Eurocode Loading\n", "bold")
+    p_text1.insert("end", 
+    "Load model 2 - two wheels 2m apart with wheel load 200kN, contact pressure 1250 kPa with" \
+    "contact area being a 0.4m square area:\n" \
+    "[[-1, 0, 200], [1, 0, 200]]\n\n", "normal")
+    p_text1.insert("end", "Historic Loading (Young and O'Reilly (1983), BS 5400-2:1978)\n", "bold")
+    p_text1.insert("end", 
+    "Main road loading - 45 units HB loading: static wheel of 112.5 kN including impact factor of "\
+    "1.25, contact pressure 1100 kPa. Comprises eight wheels spread across two axles with wheel " \
+    "spacing 1.0m, axle spacing 1.8m. \nPosition #1 - Axles Straddling Origin:\n"
+    "[[-1.5, -0.9, 112.5], [-0.5, -0.9, 112.5], [0.5, -0.9, 112.5], [1.5, -0.9, 112.5], " \
+    "[-1.5, 0.9, 112.5], [-0.5, 0.9, 112.5], [0.5, 0.9, 112.5], [1.5, 0.9, 112.5]]\n" \
+    "Position #2 - One Axle Directly Over Origin:\n"
+    "[[-1.5, 0, 112.5], [-0.5, 0, 112.5], [0.5, 0, 112.5], [1.5, 0, 112.5], " \
+    "[-1.5, 1.8, 112.5], [-0.5, 1.8, 112.5], [0.5, 1.8, 112.5], [1.5, 1.8, 112.5]]\n\n" \
     "Light road loading - two wheels 0.9 m apart, static weight 70 kN, impact factor of 1.5 " \
-    "giving dynamic weight 105 kN, contact pressure 700 kPa\n" \
+    "giving dynamic weight 105 kN, contact pressure 700 kPa:\n" \
     "[[-0.45, 0, 105], [0.45, 0, 105]]\n\n" 
     "Field loading - two wheels 0.9 m apart, static weight 30 kN, impact factor of 2 giving " \
-    "dynamic wheel load of 60 kN, contact pressure 400 kPa\n" \
+    "dynamic wheel load of 60 kN, contact pressure 400 kPa:\n" \
     "[[-0.45, 0, 60], [0.45, 0, 60]]\n\n", "normal")
     p_text1.config(state="disabled")  # make read-only but still selectable
     p_text1.pack(padx=10, pady=10, side="left", fill="both", expand=True)
@@ -334,15 +448,18 @@ class Tooltip:
         self.widget.bind("<ButtonPress>", self.hide)
 
     def schedule(self, event=None):
+        """Starts delayed tooltip appearance"""
         self.unschedule()
         self.id = self.widget.after(self.delay, self.show)
 
     def unschedule(self):
+        """Cancels any pending tooltip timer"""
         if self.id:
             self.widget.after_cancel(self.id)
             self.id = None
 
     def show(self, event=None):
+        """Displays tooltip"""
         if self.tooltip_window or not self.text:
             return
         x = self.widget.winfo_rootx() + 20
@@ -356,16 +473,23 @@ class Tooltip:
         label.pack(ipadx=1)
 
     def hide(self, event=None):
+        """Hides tooltip"""
         self.unschedule()
         if self.tooltip_window:
             self.tooltip_window.destroy()
             self.tooltip_window = None
 
-# ------------------- GUI ------------------- #
-# ------------------- Root Window and Main Frames ------------------- #
+# ==============================================================================
+# GUI
+# ==============================================================================
+
+# ==============================================================================
+# Root Window and Main Frames
+# ==============================================================================
+
 root = tk.Tk()
 root.title("Traffic Pressures on Pipes")
-root.geometry("640x480")
+root.geometry("1080x1080")
 
 mcanvas = tk.Canvas(root)
 mcanvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -397,7 +521,10 @@ tk.Label(scrollframe,
               "consideration of pipe diameter, bedding, or tyre contact area.",
          wraplength=620, justify="left", anchor="w").pack(fill="x", padx=10, pady=(0,10))
 
-# ------------------- Helper Functions ------------------- #
+# ==============================================================================
+# Helper Functions for GUI Elements
+# ==============================================================================
+
 def create_mframe(parent):
     frame = tk.Frame(parent, bd=1, relief="solid", padx=0, pady=0)
     frame.pack(fill="x", padx=10, pady=5)
@@ -426,7 +553,10 @@ def create_row(frame, label_text, tooltip_text=None, unit_text=None, entry_width
 
     return row_entry
 
-# ------------------- Input - Spatial Domain ------------------- #
+# ==============================================================================
+# GUI Inputs - Spatial Domain Parameters
+# ==============================================================================
+
 mframe1 = create_mframe(scrollframe)
 tk.Label(mframe1, text="Input - Spatial Domain Parameters",
          font=("Arial", 10, "bold"), anchor="w", justify="left").pack(fill="x", pady=(0,5))
@@ -467,7 +597,10 @@ row7 = create_row(mframe1,
                     "",
                     "   ")
 
-# ------------------- Input - Wheel Loads ------------------- #
+# ==============================================================================
+# GUI Inputs - Wheel Loading
+# ==============================================================================
+
 mframe2 = create_mframe(scrollframe)
 tk.Label(mframe2, text="Input - Wheel Loading", font=("Arial", 10, "bold"), anchor="w", 
          justify="left").pack(fill="x", pady=(0,5))
@@ -493,7 +626,10 @@ frame8.grid_columnconfigure(1, weight=1)
 tk.Label(mframe2, text="Note: x-y plane assumed centered on origin at (0,0)").pack(
     anchor="w", pady=(2,2))
 
-# ------------------- Results ------------------- #
+# ==============================================================================
+# GUI Outputs - Results
+# ==============================================================================
+
 mframe3 = create_mframe(scrollframe)
 tk.Label(mframe3, text="Output - Results", font=("Arial", 10, "bold"), anchor="w", 
          justify="left").pack(fill="x", pady=(0,5))
@@ -532,7 +668,7 @@ frame13.columnconfigure(0, weight=1)
 
 frame14 = tk.Frame(mframe3)
 frame14.pack(fill="x", pady=2)
-label14 = tk.Label(frame14, text="Plot pressures on x-y plane at depth:", anchor="w", 
+label14 = tk.Label(frame14, text="Plot pressures on x-y plane at depth, z:", anchor="w", 
                    justify="left", width=35)
 label14.grid(row=0, column=0, sticky="w")
 combobox14 = ttk.Combobox(frame14)
@@ -541,12 +677,24 @@ tk.Label(frame14, text="m", anchor="w").grid(row=0, column=2, sticky="w", padx=(
 frame14.grid_columnconfigure(0, weight=1)
 frame14.grid_columnconfigure(1, weight=0)
 
+frame17 = tk.Frame(mframe3)
+frame17.pack(fill="x", pady=2)
+label17 = tk.Label(frame17, text="Plot pressures on x-z plane at y:", anchor="w", 
+                   justify="left", width=35)
+label17.grid(row=0, column=0, sticky="w")
+combobox17 = ttk.Combobox(frame17)
+combobox17.grid(row=0, column=1, sticky="e")
+tk.Label(frame17, text="m", anchor="w").grid(row=0, column=2, sticky="w", padx=(5,0))
+frame17.grid_columnconfigure(0, weight=1)
+frame17.grid_columnconfigure(1, weight=0)
+
 
 def on_plot():
-    value = combobox14.get()
-    if not value:
+    y_value = combobox17.get()
+    z_value = combobox14.get()
+    if not (y_value and z_value):
         return
-    plot_results(float(value))
+    plot_results(float(y_value), float(z_value))
 
 frame15 = tk.Frame(mframe3)
 frame15.pack(fill="x", pady=2)
@@ -556,10 +704,28 @@ button15.grid(row=0, column=0, sticky="ew")
 frame15.rowconfigure(0, weight=1)
 frame15.columnconfigure(0, weight=1)
 
-fig = Figure(figsize=(8, 8))
-ax = fig.add_subplot(111)
-plotcanvas = FigureCanvasTkAgg(fig, master=mframe3)
-plotcanvas.draw()
-plotcanvas.get_tk_widget().pack(fill="both", expand=True)
+fig15 = Figure(figsize=(8, 8))
+ax1 = fig15.add_subplot(111)
+plotcanvas15 = FigureCanvasTkAgg(fig15, master=mframe3)
+plotcanvas15.draw()
+plotcanvas15.get_tk_widget().pack(fill="both", expand=True)
 
+fig16 = Figure(figsize=(8, 8))
+ax3 = fig16.add_subplot(111)
+plotcanvas16 = FigureCanvasTkAgg(fig16, master=mframe3)
+plotcanvas16.draw()
+plotcanvas16.get_tk_widget().pack(fill="both", expand=True)
+
+
+# Default values
+row1.insert(0, "2")
+row2.insert(0, "0.3")
+row3.insert(0, "0.5")
+row4.insert(0, "2")
+row5.insert(0, "20")
+row6.insert(0, "3")
+row7.insert(0, "16")
+entry8.insert(0, "[[-0.45, 0, 60], [0.45, 0, 60]]")
+row12.insert(0, "1")
 root.mainloop()
+# to do: add other plots, log plot of Ps, surface pressures in x-z plane

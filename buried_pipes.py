@@ -206,7 +206,7 @@ def plot_results(y, z):
     ax1.plot(val_Ps, val_z, color="blue", linewidth=2, linestyle="-", marker="*")
     ax1.set_title("Design Surcharge Pressure Ps with Depth")
     ax1.set_xlabel("Surcharge Pressure [kPa], Ps")
-    ax1.set_ylabel("Depth [m], z")
+    ax1.set_ylabel("Cover Depth [m], H")
     ax1.invert_yaxis()
     ax1.minorticks_on()
     ax1.grid(which='major',
@@ -618,7 +618,7 @@ frame16.columnconfigure(0, weight=1)
 
 frame8 = tk.Frame(mframe2)
 frame8.pack(fill="x", pady=2)
-tk.Label(frame8, text="Set of point loads as [x1, y1, P1], [x2, y2, P2], ...",
+tk.Label(frame8, text="Set of point loads as [[x1, y1, P1], [x2, y2, P2], ...]",
          anchor="w", justify="left").grid(row=0, column=0, sticky="w", padx=(0,5))
 entry8 = tk.Entry(frame8)
 entry8.grid(row=0, column=1, sticky="ew")
@@ -704,13 +704,13 @@ button15.grid(row=0, column=0, sticky="ew")
 frame15.rowconfigure(0, weight=1)
 frame15.columnconfigure(0, weight=1)
 
-fig15 = Figure(figsize=(8, 8))
+fig15 = Figure(figsize=(8, 12))
 ax1 = fig15.add_subplot(111)
 plotcanvas15 = FigureCanvasTkAgg(fig15, master=mframe3)
 plotcanvas15.draw()
 plotcanvas15.get_tk_widget().pack(fill="both", expand=True)
 
-fig16 = Figure(figsize=(8, 8))
+fig16 = Figure(figsize=(8, 12))
 ax3 = fig16.add_subplot(111)
 plotcanvas16 = FigureCanvasTkAgg(fig16, master=mframe3)
 plotcanvas16.draw()

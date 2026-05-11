@@ -22,6 +22,11 @@ National Highways. (2025). CD 533 V1.2.0 Determination of pipe and bedding combi
     works.
 Young, O.C. and O’Reilly, M.P. (1983). A Guide to Design Loadings for Buried Rigid Pipes.
 Young, O. and Trott, J. (1984). Buried Rigid Pipes. CRC Press.
+
+====================================================================================================
+Build Instructions
+====================================================================================================
+pyinstaller --onefile --noconsole --name "Traffic Pressures on Buried Pipes" buried_pipes.py
 """
 
 # ==================================================================================================

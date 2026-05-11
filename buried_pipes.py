@@ -1,23 +1,192 @@
-# ==============================================================================
+"""
+====================================================================================================
+Technical Basis
+====================================================================================================
+DMRB loads are taken from CD 533.
+Eurocode loads are taken from BS 9295.
+Historic loads are taken from Young and O'Reilly (1983).
+
+It should be noted that the charts for construction vehicle loading produced by Young and O'Reilly
+(1983) and reproduced in BS 9295 will produce different results than this code. This is because this
+code discretises wheel loads over an assumed circular contact area into ten different elements after
+Nath (1981). However, Young and O'Reilly pressures appear to be obtained by discretising each wheel
+load into quadrants.
+
+====================================================================================================
+References
+====================================================================================================
+British Standards Institution (2023). BS 9295 AMD 1. Guide to the Structural Design of Buried 
+    Pipelines.
+Nath, P. (1981). Pressures on Buried Pipes Due to Revised HB Loading.
+National Highways. (2025). CD 533 V1.2.0 Determination of pipe and bedding combinations for drainage 
+    works.
+Young, O.C. and O’Reilly, M.P. (1983). A Guide to Design Loadings for Buried Rigid Pipes.
+Young, O. and Trott, J. (1984). Buried Rigid Pipes. CRC Press.
+
+====================================================================================================
+Build Instructions
+====================================================================================================
+pyinstaller --onefile --noconsole --name "Traffic Pressures on Buried Pipes" buried_pipes.py
+"""
+
+# ==================================================================================================
 # Imports
-# ==============================================================================
+# ==================================================================================================
 import csv
 import json
 import math
-import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.ticker import FixedLocator, FormatStrFormatter, NullFormatter
-from matplotlib.widgets import Slider
 import numpy as np
 import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog
+# import matplotlib.pyplot as plt
+# from mpl_toolkits.mplot3d import Axes3D
+# from matplotlib.widgets import Slider
 
-# ==============================================================================
+# ==================================================================================================
+# Hard Coded Reference Loads
+# ==================================================================================================
+# L1 prefix denotes wheel loads represented by points
+# Otherwise loads have been discretised into 10 point loads per wheel using contact pressure and
+# assuming a circular contact area
+# 10t = 200kN, 30t = 590kN
+global ref_loads
+ref_loads = {
+    "L1_DMRBMainRoad1": [[-1.5, -0.9, 112.5], [-0.5, -0.9, 112.5], [0.5, -0.9, 112.5], 
+                        [1.5, -0.9, 112.5], [-1.5, 0.9, 112.5], [-0.5, 0.9, 112.5], 
+                        [0.5, 0.9, 112.5], [1.5, 0.9, 112.5]],
+    "L1_DMRBMainRoad2": [[-1.5, 0, 112.5], [-0.5, 0, 112.5], [0.5, 0, 112.5], 
+                        [1.5, 0, 112.5], [-1.5, 1.8, 112.5], [-0.5, 1.8, 112.5], 
+                        [0.5, 1.8, 112.5], [1.5, 1.8, 112.5]],
+    "L1_DMRBFilter": [[-0.5, 0, 87.5], [0.5, 0, 87.5]],
+    "L1_DMRBField": [[-0.5, 0, 60], [0.5, 0, 60]],
+    "DMRBMainRoad1": [[-1.462, -0.862, 7.031], [-1.538, -0.862, 7.031], [-1.538, -0.938, 7.031], 
+                        [-1.462, -0.938, 7.031], [-1.384, -0.784, 14.062], [-1.5, -0.766, 14.062], 
+                        [-1.616, -0.784, 14.062], [-1.616, -1.016, 14.062], [-1.5, -1.034, 14.062], 
+                        [-1.384, -1.016, 14.062], [-0.462, -0.862, 7.031], [-0.538, -0.862, 7.031], 
+                        [-0.538, -0.938, 7.031], [-0.462, -0.938, 7.031], [-0.384, -0.784, 14.062], 
+                        [-0.5, -0.766, 14.062], [-0.616, -0.784, 14.062], [-0.616, -1.016, 14.062], 
+                        [-0.5, -1.034, 14.062], [-0.384, -1.016, 14.062], [0.538, -0.862, 7.031], 
+                        [0.462, -0.862, 7.031], [0.462, -0.938, 7.031], [0.538, -0.938, 7.031], 
+                        [0.616, -0.784, 14.062], [0.5, -0.766, 14.062], [0.384, -0.784, 14.062], 
+                        [0.384, -1.016, 14.062], [0.5, -1.034, 14.062], [0.616, -1.016, 14.062], 
+                        [1.538, -0.862, 7.031], [1.462, -0.862, 7.031], [1.462, -0.938, 7.031], 
+                        [1.538, -0.938, 7.031], [1.616, -0.784, 14.062], [1.5, -0.766, 14.062], 
+                        [1.384, -0.784, 14.062], [1.384, -1.016, 14.062], [1.5, -1.034, 14.062], 
+                        [1.616, -1.016, 14.062], [-1.462, 0.938, 7.031], [-1.538, 0.938, 7.031], 
+                        [-1.538, 0.862, 7.031], [-1.462, 0.862, 7.031], [-1.384, 1.016, 14.062], 
+                        [-1.5, 1.034, 14.062], [-1.616, 1.016, 14.062], [-1.616, 0.784, 14.062], 
+                        [-1.5, 0.766, 14.062], [-1.384, 0.784, 14.062], [-0.462, 0.938, 7.031], 
+                        [-0.538, 0.938, 7.031], [-0.538, 0.862, 7.031], [-0.462, 0.862, 7.031], 
+                        [-0.384, 1.016, 14.062], [-0.5, 1.034, 14.062], [-0.616, 1.016, 14.062], 
+                        [-0.616, 0.784, 14.062], [-0.5, 0.766, 14.062], [-0.384, 0.784, 14.062], 
+                        [0.538, 0.938, 7.031], [0.462, 0.938, 7.031], [0.462, 0.862, 7.031], 
+                        [0.538, 0.862, 7.031], [0.616, 1.016, 14.062], [0.5, 1.034, 14.062], 
+                        [0.384, 1.016, 14.062], [0.384, 0.784, 14.062], [0.5, 0.766, 14.062], 
+                        [0.616, 0.784, 14.062], [1.538, 0.938, 7.031], [1.462, 0.938, 7.031], 
+                        [1.462, 0.862, 7.031], [1.538, 0.862, 7.031], [1.616, 1.016, 14.062], 
+                        [1.5, 1.034, 14.062], [1.384, 1.016, 14.062], [1.384, 0.784, 14.062], 
+                        [1.5, 0.766, 14.062], [1.616, 0.784, 14.062]],
+    "DMRBMainRoad2": [[-1.462, 0.038, 7.031], [-1.538, 0.038, 7.031], [-1.538, -0.038, 7.031], 
+                      [-1.462, -0.038, 7.031], [-1.384, 0.116, 14.062], [-1.5, 0.134, 14.062], 
+                      [-1.616, 0.116, 14.062], [-1.616, -0.116, 14.062], [-1.5, -0.134, 14.062], 
+                      [-1.384, -0.116, 14.062], [-0.462, 0.038, 7.031], [-0.538, 0.038, 7.031], 
+                      [-0.538, -0.038, 7.031], [-0.462, -0.038, 7.031], [-0.384, 0.116, 14.062], 
+                      [-0.5, 0.134, 14.062], [-0.616, 0.116, 14.062], [-0.616, -0.116, 14.062], 
+                      [-0.5, -0.134, 14.062], [-0.384, -0.116, 14.062], [0.538, 0.038, 7.031], 
+                      [0.462, 0.038, 7.031], [0.462, -0.038, 7.031], [0.538, -0.038, 7.031], 
+                      [0.616, 0.116, 14.062], [0.5, 0.134, 14.062], [0.384, 0.116, 14.062], 
+                      [0.384, -0.116, 14.062], [0.5, -0.134, 14.062], [0.616, -0.116, 14.062], 
+                      [1.538, 0.038, 7.031], [1.462, 0.038, 7.031], [1.462, -0.038, 7.031], 
+                      [1.538, -0.038, 7.031], [1.616, 0.116, 14.062], [1.5, 0.134, 14.062], 
+                      [1.384, 0.116, 14.062], [1.384, -0.116, 14.062], [1.5, -0.134, 14.062], 
+                      [1.616, -0.116, 14.062], [-1.462, 1.838, 7.031], [-1.538, 1.838, 7.031], 
+                      [-1.538, 1.762, 7.031], [-1.462, 1.762, 7.031], [-1.384, 1.916, 14.062], 
+                      [-1.5, 1.934, 14.062], [-1.616, 1.916, 14.062], [-1.616, 1.684, 14.062], 
+                      [-1.5, 1.666, 14.062], [-1.384, 1.684, 14.062], [-0.462, 1.838, 7.031], 
+                      [-0.538, 1.838, 7.031], [-0.538, 1.762, 7.031], [-0.462, 1.762, 7.031], 
+                      [-0.384, 1.916, 14.062], [-0.5, 1.934, 14.062], [-0.616, 1.916, 14.062], 
+                      [-0.616, 1.684, 14.062], [-0.5, 1.666, 14.062], [-0.384, 1.684, 14.062], 
+                      [0.538, 1.838, 7.031], [0.462, 1.838, 7.031], [0.462, 1.762, 7.031], 
+                      [0.538, 1.762, 7.031], [0.616, 1.916, 14.062], [0.5, 1.934, 14.062], 
+                      [0.384, 1.916, 14.062], [0.384, 1.684, 14.062], [0.5, 1.666, 14.062], 
+                      [0.616, 1.684, 14.062], [1.538, 1.838, 7.031], [1.462, 1.838, 7.031], 
+                      [1.462, 1.762, 7.031], [1.538, 1.762, 7.031], [1.616, 1.916, 14.062], 
+                      [1.5, 1.934, 14.062], [1.384, 1.916, 14.062], [1.384, 1.684, 14.062], 
+                      [1.5, 1.666, 14.062], [1.616, 1.684, 14.062]],
+    "DMRB_Filter": [[-0.472, 0.028, 3.75], [-0.528, 0.028, 3.75], [-0.528, -0.028, 3.75], 
+                    [-0.472, -0.028, 3.75], [-0.415, 0.085, 7.5], [-0.5, 0.098, 7.5], 
+                    [-0.585, 0.085, 7.5], [-0.585, -0.085, 7.5], [-0.5, -0.098, 7.5], 
+                    [-0.415, -0.085, 7.5], [0.528, 0.028, 3.75], [0.472, 0.028, 3.75], 
+                    [0.472, -0.028, 3.75], [0.528, -0.028, 3.75], [0.585, 0.085, 7.5], 
+                    [0.5, 0.098, 7.5], [0.415, 0.085, 7.5], [0.415, -0.085, 7.5], 
+                    [0.5, -0.098, 7.5], [0.585, -0.085, 7.5]],
+    "DMRB_Field": [[-0.454, 0.046, 3.75], [-0.546, 0.046, 3.75], [-0.546, -0.046, 3.75], 
+                   [-0.454, -0.046, 3.75], [-0.359, 0.141, 7.5], [-0.5, 0.162, 7.5], 
+                   [-0.641, 0.141, 7.5], [-0.641, -0.141, 7.5], [-0.5, -0.162, 7.5], 
+                   [-0.359, -0.141, 7.5], [0.546, 0.046, 3.75], [0.454, 0.046, 3.75], 
+                   [0.454, -0.046, 3.75], [0.546, -0.046, 3.75], [0.641, 0.141, 7.5], 
+                   [0.5, 0.162, 7.5], [0.359, 0.141, 7.5], [0.359, -0.141, 7.5], 
+                   [0.5, -0.162, 7.5], [0.641, -0.141, 7.5]],
+    "10t_2_300": [[0.098, 0.098, 12.5], [-0.098, 0.098, 12.5], [-0.098, -0.098, 12.5], 
+                  [0.098, -0.098, 12.5], [0.296, 0.296, 25.0], [0, 0.342, 25.0], 
+                  [-0.296, 0.296, 25.0], [-0.296, -0.296, 25.0], [0, -0.342, 25.0], 
+                  [0.296, -0.296, 25.0]],
+    "10t_2_700": [[0.064, 0.064, 12.5], [-0.064, 0.064, 12.5], [-0.064, -0.064, 12.5], 
+                  [0.064, -0.064, 12.5], [0.194, 0.194, 25.0], [0, 0.224, 25.0], 
+                  [-0.194, 0.194, 25.0], [-0.194, -0.194, 25.0], [0, -0.224, 25.0], 
+                  [0.194, -0.194, 25.0]],
+    "30t_2_300": [[0.168, 0.168, 36.875], [-0.168, 0.168, 36.875], [-0.168, -0.168, 36.875], 
+                  [0.168, -0.168, 36.875], [0.509, 0.509, 73.75], [0, 0.588, 73.75], 
+                  [-0.509, 0.509, 73.75], [-0.509, -0.509, 73.75], [0, -0.588, 73.75], 
+                  [0.509, -0.509, 73.75]],
+    "30t_2_700": [[0.11, 0.11, 36.875], [-0.11, 0.11, 36.875], [-0.11, -0.11, 36.875], 
+                  [0.11, -0.11, 36.875], [0.333, 0.333, 73.75], [0, 0.385, 73.75], 
+                  [-0.333, 0.333, 73.75], [-0.333, -0.333, 73.75], [0, -0.385, 73.75], 
+                  [0.333, -0.333, 73.75]],
+    "Eurocode_LM1": [[-0.952, 0.048, 12.5], [-1.048, 0.048, 12.5], [-1.048, -0.048, 12.5], 
+                     [-0.952, -0.048, 12.5], [-0.855, 0.145, 25.0], [-1, 0.168, 25.0], 
+                     [-1.145, 0.145, 25.0], [-1.145, -0.145, 25.0], [-1, -0.168, 25.0], 
+                     [-0.855, -0.145, 25.0], [1.048, 0.048, 12.5], [0.952, 0.048, 12.5], 
+                     [0.952, -0.048, 12.5], [1.048, -0.048, 12.5], [1.145, 0.145, 25.0], 
+                     [1, 0.168, 25.0], [0.855, 0.145, 25.0], [0.855, -0.145, 25.0], 
+                     [1, -0.168, 25.0], [1.145, -0.145, 25.0]],
+    "Eurocode_LM2": [[-0.552, -0.452, 9.375], [-0.648, -0.452, 9.375], [-0.648, -0.548, 9.375], 
+                     [-0.552, -0.548, 9.375], [-0.455, -0.355, 18.75], [-0.6, -0.332, 18.75], 
+                     [-0.745, -0.355, 18.75], [-0.745, -0.645, 18.75], [-0.6, -0.668, 18.75], 
+                     [-0.455, -0.645, 18.75], [0.648, -0.452, 9.375], [0.552, -0.452, 9.375], 
+                     [0.552, -0.548, 9.375], [0.648, -0.548, 9.375], [0.745, -0.355, 18.75], 
+                     [0.6, -0.332, 18.75], [0.455, -0.355, 18.75], [0.455, -0.645, 18.75], 
+                     [0.6, -0.668, 18.75], [0.745, -0.645, 18.75], [-0.552, -2.452, 9.375], 
+                     [-0.648, -2.452, 9.375], [-0.648, -2.548, 9.375], [-0.552, -2.548, 9.375], 
+                     [-0.455, -2.355, 18.75], [-0.6, -2.332, 18.75], [-0.745, -2.355, 18.75], 
+                     [-0.745, -2.645, 18.75], [-0.6, -2.668, 18.75], [-0.455, -2.645, 18.75], 
+                     [0.648, -2.452, 9.375], [0.552, -2.452, 9.375], [0.552, -2.548, 9.375], 
+                     [0.648, -2.548, 9.375], [0.745, -2.355, 18.75], [0.6, -2.332, 18.75], 
+                     [0.455, -2.355, 18.75], [0.455, -2.645, 18.75], [0.6, -2.668, 18.75], 
+                     [0.745, -2.645, 18.75],
+                     [-0.552, 0.548, 6.25], [-0.648, 0.548, 6.25], [-0.648, 0.452, 6.25], 
+                     [-0.552, 0.452, 6.25], [-0.455, 0.645, 12.5], [-0.6, 0.668, 12.5], 
+                     [-0.745, 0.645, 12.5], [-0.745, 0.355, 12.5], [-0.6, 0.332, 12.5], 
+                     [-0.455, 0.355, 12.5], [0.648, 0.548, 6.25], [0.552, 0.548, 6.25], 
+                     [0.552, 0.452, 6.25], [0.648, 0.452, 6.25], [0.745, 0.645, 12.5], 
+                     [0.6, 0.668, 12.5], [0.455, 0.645, 12.5], [0.455, 0.355, 12.5], 
+                     [0.6, 0.332, 12.5], [0.745, 0.355, 12.5], [-0.552, 2.548, 6.25], 
+                     [-0.648, 2.548, 6.25], [-0.648, 2.452, 6.25], [-0.552, 2.452, 6.25], 
+                     [-0.455, 2.645, 12.5], [-0.6, 2.668, 12.5], [-0.745, 2.645, 12.5], 
+                     [-0.745, 2.355, 12.5], [-0.6, 2.332, 12.5], [-0.455, 2.355, 12.5], 
+                     [0.648, 2.548, 6.25], [0.552, 2.548, 6.25], [0.552, 2.452, 6.25], 
+                     [0.648, 2.452, 6.25], [0.745, 2.645, 12.5], [0.6, 2.668, 12.5], 
+                     [0.455, 2.645, 12.5], [0.455, 2.355, 12.5], [0.6, 2.332, 12.5], 
+                     [0.745, 2.355, 12.5]]
+}
+
+# ==================================================================================================
 # Class for Model Parameters and Methods
-# ==============================================================================
+# ==================================================================================================
 
 class PipePressures:
     def __init__(self):
@@ -117,7 +286,7 @@ class PipePressures:
 # Functions Called By GUI to Produce & Manipulate Results
 # ==============================================================================
 
-def solve():
+def solve_gui():
     """Takes inputs from GUI and creates an instance of class 'PipePressures' to solve"""
     global solution
     try:
@@ -141,9 +310,29 @@ def solve():
     solution.boussinesq_pressure()
     solution.design_pressure_Ps(float(row12.get()))
     # Populate drop-box for plotting
-    combobox14['values'] = solution.z_arr.tolist()
-    combobox17['values'] = solution.y_arr.tolist()
+    combobox14['values'] = [round(v, 3) for v in solution.z_arr.tolist()][::-1]
+    combobox17['values'] = [round(v, 3) for v in solution.y_arr.tolist()][::-1]
     return
+
+def solve_Ps(loads):
+    """Create instance of class PipePressures(), solve, and return design construction surcharge
+    pressure, Ps. This is distinct from solve_gui() since it avoids invoking global variable
+    'solution' and does not update GUI comboboxes."""
+    sol_gen = PipePressures()
+    x = float(row1.get())
+    y = float(row2.get())
+    z = float(row3.get())
+    zmin = float(row4.get())
+    xdivs = int(row5.get())
+    ydivs = int(row6.get())
+    zdivs = int(row7.get())
+    sol_gen.mesh(x, y, z, xdivs, ydivs, zdivs, zmin=zmin)
+    sol_gen.wheel_loads(loads)
+    sol_gen.boussinesq_pressure()
+    sol_gen.design_pressure_Ps(float(row12.get()))
+    z_res = [row[0] for row in sol_gen.results_Ps]
+    Ps_res = [row[1] for row in sol_gen.results_Ps]
+    return z_res, Ps_res
 
 def save_pressures():
     """Enables saving of comma-delimited results to .txt or .csv file"""
@@ -186,7 +375,7 @@ def plot_results(y, z):
         y (float): y coordinate for X-Z slice
         z (float): Z coordinate for X-Y slice
     """
-    # Extract results
+    # Extract results from GUI inputs
     global solution
     np_results_Ps = np.asarray(solution.results_Ps)
     np_res_p = np.asarray(solution.results_pressures)
@@ -208,8 +397,9 @@ def plot_results(y, z):
     global fig15
     fig15.clear()
     ax1 = fig15.add_subplot(1, 2, 1)
-    ax2 = fig15.add_subplot(1, 2, 2, projection='3d')
-    ax1.plot(val_Ps, val_z, color="blue", linewidth=2, linestyle="-", marker="*")
+    ax2 = fig15.add_subplot(1, 2, 2)
+    ax1.plot(val_Ps, val_z, linewidth=1, linestyle="-", marker="o", 
+             label="User input")
     ax1.set_title("Design Surcharge Pressure Ps with Depth")
     ax1.set_xlabel("Surcharge Pressure [kPa], Ps")
     ax1.set_ylabel("Cover Depth [m], H")
@@ -223,14 +413,87 @@ def plot_results(y, z):
             linestyle=':',
             linewidth=0.5,
             color='lightgray')
-    ax2.plot_surface(val_X, val_Y, val_Z, cmap="viridis")
-    ax2.set_title("Boussinesq Pressures Across X-Y Plane at Specified Depth")
-    ax2.set_xlabel("x [m]")
-    ax2.set_ylabel("y [m]")
-    ax2.set_zlabel("Boussinesq Pressure [kPa]")
+    ax2.plot(val_z, val_Ps, linewidth=1, linestyle="-", marker="o")
+    ax2.set_title("Design Surcharge Pressure Ps with Depth")
+    ax2.set_xscale("log")
+    ax2.set_yscale("log")
+    ax2.set_xlim(0.5, 10)
+    ax2.set_ylim(5, 500)
+    x_ticks = [0.5, 1, 2, 3, 4, 5, 10]
+    y_ticks = [5, 10, 20, 30, 40, 50, 100, 200, 300, 400, 500]
+    ax2.xaxis.set_major_locator(FixedLocator(x_ticks))
+    ax2.yaxis.set_major_locator(FixedLocator(y_ticks))
+    ax2.xaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+    ax2.yaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+    ax2.set_xticks(x_ticks)
+    ax2.set_yticks(y_ticks)
+    ax2.xaxis.set_minor_locator(FixedLocator(x_ticks))
+    ax2.yaxis.set_minor_locator(FixedLocator(y_ticks))
+    ax2.xaxis.set_minor_formatter(NullFormatter())
+    ax2.yaxis.set_minor_formatter(NullFormatter())
+    ax2.set_xticks([0.6, 0.7, 0.8, 0.9, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.2, 2.4, 
+                    2.6, 2.8, 3.2, 3.4, 3.6, 3.8, 4.2, 4.4, 4.6, 4.8, 6, 7, 8, 9], minor=True)
+    ax2.set_yticks([6, 7, 8, 9, 11, 12, 13, 14, 15, 25, 35, 45, 60, 70, 80, 90, 120, 140, 160, 180, 
+                    220, 240, 260, 280, 320, 340, 360, 380, 420, 440, 460, 480], 
+                    minor=True)
+    ax2.set_xlabel("Cover Depth [m], H")
+    ax2.set_ylabel("Surcharge Pressure [kPa], Ps")
+    ax2.grid(which='major',
+            linestyle='-',
+            linewidth=0.8,
+            color='gray')
+    ax2.grid(which='minor',
+            linestyle=':',
+            linewidth=0.5,
+            color='lightgray')
+    
+    def ref_plot(ax, ref_load, label, cover_on_y=True, style="--", marker="x"):
+        """Add results from reference loads to plot"""
+        global ref_loads
+        if cover_on_y is True:
+            y, x = solve_Ps(ref_loads[ref_load])
+        else:
+            x, y = solve_Ps(ref_loads[ref_load])
+        ax.plot(x, y, label=label, linewidth=0.5, linestyle=style, marker=marker)
+        return
+    
+    if var19.get() is True:
+        ref_plot(ax1, "DMRBMainRoad1", "DMRB Main Road (straddle)")
+        ref_plot(ax1, "DMRBMainRoad2", "DMRB Main Road (axle over crown)")
+        ref_plot(ax2, "DMRBMainRoad1", "DMRB Main Road (straddle)", cover_on_y=False)
+        ref_plot(ax2, "DMRBMainRoad2", "DMRB Main Road (axle over crown)", cover_on_y=False)
+    if var20.get() is True:
+        ref_plot(ax1, "DMRB_Filter", "DMRB Filter")
+        ref_plot(ax2, "DMRB_Filter", "DMRB Filter", cover_on_y=False)
+    if var21.get() is True:
+        ref_plot(ax1, "DMRB_Field", "DMRB Field")
+        ref_plot(ax2, "DMRB_Field", "DMRB  Field", cover_on_y=False)
+    if var22.get() is True:
+        ref_plot(ax1, "10t_2_300", "10t wheel, DAF=2, 300kPa")
+        ref_plot(ax2, "10t_2_300", "10t wheel, DAF=2, 300kPa", cover_on_y=False)
+    if var23.get() is True:
+        ref_plot(ax1, "10t_2_700", "10t wheel, DAF=2, 700kPa")
+        ref_plot(ax2, "10t_2_700", "10t wheel, DAF=2, 700kPa", cover_on_y=False)
+    if var24.get() is True:
+        ref_plot(ax1, "30t_2_300", "30t wheel, DAF=2, 300kPa")
+        ref_plot(ax2, "30t_2_300", "30t wheel, DAF=2, 300kPa", cover_on_y=False)
+    if var25.get() is True:
+        ref_plot(ax1, "30t_2_700", "30t wheel, DAF=2, 700kPa")
+        ref_plot(ax2, "30t_2_700", "30t wheel, DAF=2, 700kPa", cover_on_y=False)
+    if var26.get() is True:
+        ref_plot(ax1, "Eurocode_LM1", "Eurocode LM1")
+        ref_plot(ax2, "Eurocode_LM1", "Eurocode LM1", cover_on_y=False)
+    if var27.get() is True:
+        ref_plot(ax1, "Eurocode_LM2", "Eurocode LM2")
+        ref_plot(ax2, "Eurocode_LM2", "Eurocode LM2", cover_on_y=False)
+    ax1.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), bbox_transform=ax1.transAxes, 
+               fontsize="small", ncol=2)
+    ax2.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), bbox_transform=ax2.transAxes, 
+               fontsize="small", ncol=2)
+    fig15.subplots_adjust(wspace=0.2, bottom=0.25)
     plotcanvas15.draw()
 
-    # Set up fig16
+    # Set up fig16   
     val_x2 = solution.x_arr
     val_z2 = solution.z_arr
     val_X2, val_Y2 = np.meshgrid(val_x2, val_z2)
@@ -244,43 +507,15 @@ def plot_results(y, z):
                     break
     global fig16
     fig16.clear()
-    ax3 = fig16.add_subplot(1, 2, 1)
+    ax3 = fig16.add_subplot(1, 2, 1, projection='3d')
     ax4 = fig16.add_subplot(1, 2, 2, projection='3d')
-    ax3.plot(val_z, val_Ps, color="blue", linewidth=2, linestyle="-", marker="*")
-    ax3.set_title("Design Surcharge Pressure Ps with Depth")
-    ax3.set_xscale("log")
-    ax3.set_yscale("log")
-    ax3.set_xlim(0.5, 10)
-    ax3.set_ylim(5, 500)
-    x_ticks = [0.5, 1, 2, 3, 4, 5, 10]
-    y_ticks = [5, 10, 20, 30, 40, 50, 100, 200, 300, 400, 500]
-    ax3.xaxis.set_major_locator(FixedLocator(x_ticks))
-    ax3.yaxis.set_major_locator(FixedLocator(y_ticks))
-    ax3.xaxis.set_major_formatter(FormatStrFormatter('%.1f'))
-    ax3.yaxis.set_major_formatter(FormatStrFormatter('%.0f'))
-    ax3.set_xticks(x_ticks)
-    ax3.set_yticks(y_ticks)
-    ax3.xaxis.set_minor_locator(FixedLocator(x_ticks))
-    ax3.yaxis.set_minor_locator(FixedLocator(y_ticks))
-    ax3.xaxis.set_minor_formatter(NullFormatter())
-    ax3.yaxis.set_minor_formatter(NullFormatter())
-    ax3.set_xticks([0.6, 0.7, 0.8, 0.9, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.2, 2.4, 
-                    2.6, 2.8, 3.2, 3.4, 3.6, 3.8, 4.2, 4.4, 4.6, 4.8, 6, 7, 8, 9], minor=True)
-    ax3.set_yticks([6, 7, 8, 9, 15, 25, 35, 45, 60, 70, 80, 90, 120, 140, 160, 180, 
-                    220, 240, 260, 280, 320, 340, 360, 380, 420, 440, 460, 480], 
-                    minor=True)
-    ax3.set_xlabel("Cover Depth [m], H")
-    ax3.set_ylabel("Surcharge Pressure [kPa], Ps")
-    ax3.grid(which='major',
-            linestyle='-',
-            linewidth=0.8,
-            color='gray')
-    ax3.grid(which='minor',
-            linestyle=':',
-            linewidth=0.5,
-            color='lightgray')
+    ax3.plot_surface(val_X, val_Y, val_Z, cmap="viridis")
+    ax3.set_title("Boussinesq Pressures Across X-Y Plane\n at Specified Depth")
+    ax3.set_xlabel("x [m]")
+    ax3.set_ylabel("y [m]")
+    ax3.set_zlabel("Boussinesq Pressure [kPa]")
     ax4.plot_surface(val_X2, val_Y2, val_Z2, cmap="viridis")
-    ax4.set_title("Boussinesq Pressures Across X-Z Plane at Specified Y")
+    ax4.set_title("Boussinesq Pressures Across X-Z Plane\n at Specified Y")
     ax4.set_xlabel("x [m]")
     ax4.set_ylabel("z [m]")
     ax4.set_zlabel("Boussinesq Pressure [kPa]")
@@ -323,11 +558,13 @@ def discretise_wheel(load, pressure, x=0, y=0, r1r2=0.5):
     x1_sect = y_sect * math.cos(alpha)
     y1_sect = y_sect * math.cos(alpha)
     p_sect = a_sect / area * load
-    return [[x + y_quad, y + y_quad, p_quad], [x - y_quad, y + y_quad, p_quad], 
+    result = [[x + y_quad, y + y_quad, p_quad], [x - y_quad, y + y_quad, p_quad], 
             [x - y_quad, y - y_quad, p_quad], [x + y_quad, y - y_quad, p_quad], 
             [x + x1_sect, y + y1_sect, p_sect], [x, y + y_sect, p_sect],
             [x - x1_sect, y + y1_sect, p_sect], [x - x1_sect, y - y1_sect, p_sect],
             [x, y - y_sect, p_sect], [x + x1_sect, y - y1_sect, p_sect]]
+    rounded = [[round(value, 3) for value in row] for row in result]
+    return rounded
 
 def convert_patch_loads(widget, wheel_loads, contact_pressure):
     """Runs input wheel loads through discretise_wheel() function and adds results to GUI window
@@ -339,7 +576,6 @@ def convert_patch_loads(widget, wheel_loads, contact_pressure):
         contact_pressure (kPa): contact pressure for determination of patch load
     """
     output = []
-    print("wheelloads", wheel_loads)
     for wheel in wheel_loads:
         output.extend(discretise_wheel(wheel[2], contact_pressure, x=wheel[0], 
                                        y=wheel[1]))
@@ -365,40 +601,46 @@ def show_load_dialog():
     p_text1.tag_configure("normal", font=("Arial", 10))
     p_text1.insert("1.0", "DMRB CD 533 Loading\n", "bold")
     p_text1.insert("end", 
-    "Main road loading - 45 units HB loading: static wheel of 112.5 kN including impact factor of "\
-    "1.25, contact pressure 1100 kPa. Comprises eight wheels spread across two axles with wheel " \
-    "spacing 1.0m, axle spacing 1.8m. \nPosition #1 - Axles Straddling Origin:\n"
+    "Main road loading - 45 units HB loading: static wheel of 112.5kN including impact factor of "\
+    "1.25, contact pressure 1100kPa. Comprises eight wheels spread across two axles with wheel " \
+    "spacing 1.0m, axle spacing 1.8m. \n\nPosition #1 - Axles Straddling Origin:\n"
     "[[-1.5, -0.9, 112.5], [-0.5, -0.9, 112.5], [0.5, -0.9, 112.5], [1.5, -0.9, 112.5], " \
     "[-1.5, 0.9, 112.5], [-0.5, 0.9, 112.5], [0.5, 0.9, 112.5], [1.5, 0.9, 112.5]]\n" \
     "Position #2 - One Axle Directly Over Origin:\n"
     "[[-1.5, 0, 112.5], [-0.5, 0, 112.5], [0.5, 0, 112.5], [1.5, 0, 112.5], " \
     "[-1.5, 1.8, 112.5], [-0.5, 1.8, 112.5], [0.5, 1.8, 112.5], [1.5, 1.8, 112.5]]\n\n" \
-    "Field loading - two wheels 1.0 m apart, static weight 30 kN, impact factor of 2 giving " \
-    "dynamic wheel load of 60 kN, (contact pressure assumed 400 kPa):\n" \
-    "[[-0.5, 0, 60], [0.5, 0, 60]]\n\n" \
-    "Filter drain loading - 30 units HB loading (62.5 kN wheel load), however, considering only " \
-    "two wheels with an increased dynamic factor for total wheel load 87.5 kN:\n"
-    "[[-0.5, 0, 87.5], [0.5, 0, 87.5]]\n\n", "normal")
+    "Filter drain loading - 30 units HB loading (62.5kN wheel load), however, considering only " \
+    "two wheels with an increased dynamic factor for total wheel load 87.5kN (1100kPa):\n"
+    "[[-0.5, 0, 87.5], [0.5, 0, 87.5]]\n\n" \
+    "Field loading - two wheels 1.0m apart, static weight 30kN, impact factor of 2 giving " \
+    "dynamic wheel load of 60kN, (contact pressure assumed 400kPa):\n" \
+    "[[-0.5, 0, 60], [0.5, 0, 60]]\n\n", "normal")
+    p_text1.insert("end", "Construction Loading (Young and O'Reilly (1983))\n", "bold")
+    p_text1.insert("end", 
+    "Static wheel 10t, dynamic factor 2.0, contact pressure 300-700kPa\n" \
+    "[[0, 0, 200]]\n\n" \
+    "Static wheel 30t, dynamic factor 2.0, contact pressure 300-700kPa\n" \
+    "[[0, 0, 590]]\n\n", "normal")
     p_text1.insert("end", "Eurocode Loading\n", "bold")
     p_text1.insert("end", 
-    "Load model 2 - two wheels 2m apart with wheel load 200kN, contact pressure 1250 kPa with" \
+    "Load model 2 - two wheels 2m apart with wheel load 200kN, contact pressure 1250 kPa with " \
     "contact area being a 0.4m square area:\n" \
     "[[-1, 0, 200], [1, 0, 200]]\n\n", "normal")
     p_text1.insert("end", "Historic Loading (Young and O'Reilly (1983), BS 5400-2:1978)\n", "bold")
     p_text1.insert("end", 
-    "Main road loading - 45 units HB loading: static wheel of 112.5 kN including impact factor of "\
-    "1.25, contact pressure 1100 kPa. Comprises eight wheels spread across two axles with wheel " \
-    "spacing 1.0m, axle spacing 1.8m. \nPosition #1 - Axles Straddling Origin:\n"
+    "Main road loading - 45 units HB loading: static wheel of 112.5kN including impact factor of "\
+    "1.25, contact pressure 1100kPa. Comprises eight wheels spread across two axles with wheel " \
+    "spacing 1.0m, axle spacing 1.8m. \n\nPosition #1 - Axles Straddling Origin:\n"
     "[[-1.5, -0.9, 112.5], [-0.5, -0.9, 112.5], [0.5, -0.9, 112.5], [1.5, -0.9, 112.5], " \
     "[-1.5, 0.9, 112.5], [-0.5, 0.9, 112.5], [0.5, 0.9, 112.5], [1.5, 0.9, 112.5]]\n" \
     "Position #2 - One Axle Directly Over Origin:\n"
     "[[-1.5, 0, 112.5], [-0.5, 0, 112.5], [0.5, 0, 112.5], [1.5, 0, 112.5], " \
     "[-1.5, 1.8, 112.5], [-0.5, 1.8, 112.5], [0.5, 1.8, 112.5], [1.5, 1.8, 112.5]]\n\n" \
-    "Light road loading - two wheels 0.9 m apart, static weight 70 kN, impact factor of 1.5 " \
-    "giving dynamic weight 105 kN, contact pressure 700 kPa:\n" \
+    "Light road loading - two wheels 0.9m apart, static weight 70kN, impact factor of 1.5 " \
+    "giving dynamic weight 105kN, contact pressure 700kPa:\n" \
     "[[-0.45, 0, 105], [0.45, 0, 105]]\n\n" 
-    "Field loading - two wheels 0.9 m apart, static weight 30 kN, impact factor of 2 giving " \
-    "dynamic wheel load of 60 kN, contact pressure 400 kPa:\n" \
+    "Field loading - two wheels 0.9m apart, static weight 30kN, impact factor of 2 giving " \
+    "dynamic wheel load of 60kN, contact pressure 400kPa:\n" \
     "[[-0.45, 0, 60], [0.45, 0, 60]]\n\n", "normal")
     p_text1.config(state="disabled")  # make read-only but still selectable
     p_text1.pack(padx=10, pady=10, side="left", fill="both", expand=True)
@@ -496,17 +738,17 @@ class Tooltip:
             self.tooltip_window.destroy()
             self.tooltip_window = None
 
-# ==============================================================================
+# ==================================================================================================
 # GUI
-# ==============================================================================
+# ==================================================================================================
 
-# ==============================================================================
+# ==================================================================================================
 # Root Window and Main Frames
-# ==============================================================================
+# ==================================================================================================
 
 root = tk.Tk()
 root.title("Traffic Pressures on Pipes")
-root.geometry("1080x1080")
+root.geometry("1920x1080")
 
 mcanvas = tk.Canvas(root)
 mcanvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -538,9 +780,9 @@ tk.Label(scrollframe,
               "consideration of pipe diameter, bedding, or tyre contact area.",
          wraplength=620, justify="left", anchor="w").pack(fill="x", padx=10, pady=(0,10))
 
-# ==============================================================================
+# ==================================================================================================
 # Helper Functions for GUI Elements
-# ==============================================================================
+# ==================================================================================================
 
 def create_mframe(parent):
     """Create a frame"""
@@ -552,28 +794,38 @@ def create_row(frame, label_text, tooltip_text=None, unit_text=None, entry_width
     """Create a row with label, single entry, and optional unit"""
     row_frame = tk.Frame(frame)
     row_frame.pack(fill="x", pady=2)
-
     label = tk.Label(row_frame, text=label_text, anchor="w", justify="left", width=35)
     label.grid(row=0, column=0, sticky="w")
-
     row_entry = tk.Entry(row_frame, width=entry_width)
     row_entry.grid(row=0, column=1, sticky="e")
     if tooltip_text:
         Tooltip(row_entry, tooltip_text)
-
     if unit_text:
         tk.Label(row_frame, text=unit_text, anchor="w").grid(
             row=0, column=2, sticky="w", padx=(5,0))
-
     # Make label stretch, entry fixed
     row_frame.grid_columnconfigure(0, weight=1)
     row_frame.grid_columnconfigure(1, weight=0)
-
     return row_entry
 
-# ==============================================================================
+def create_row_check(frame, label_text, variable=None):
+    """Create a row with a label and checkbutton"""
+    if variable is None:
+        variable = tk.BooleanVar(value=False)
+    row_frame = tk.Frame(frame)
+    row_frame.pack(fill="x", padx=(10,2), pady=2)
+    label = tk.Label(row_frame, text=label_text, anchor="w", justify="left")
+    label.grid(row=0, column=0, sticky="w")
+    checkbutton = tk.Checkbutton(row_frame, variable=variable)
+    checkbutton.grid(row=0, column=1, sticky="e")
+    # Make label stretch, checkbutton fixed
+    row_frame.grid_columnconfigure(0, weight=1)
+    row_frame.grid_columnconfigure(1, weight=0)
+    return checkbutton, variable
+
+# ==================================================================================================
 # GUI Inputs - Spatial Domain Parameters
-# ==============================================================================
+# ==================================================================================================
 
 mframe1 = create_mframe(scrollframe)
 tk.Label(mframe1, text="Input - Spatial Domain Parameters",
@@ -590,8 +842,8 @@ row1 = create_row(mframe1,
                     "m")
 row2 = create_row(mframe1,
                     "Model length across pipe (y direction):",
-                    "Should be arbitrarily small number to capture peak pressure at \npipe crown, " \
-                    "0.3m is recommended (3 number 0.1m elements)",
+                    "Should be arbitrarily small number to capture peak pressure at \npipe " \
+                    "crown, 0.3m is recommended (3 number 0.1m elements)",
                     "m")
 row3 = create_row(mframe1,
                     "Minimum depth (z direction):",
@@ -607,17 +859,17 @@ row5 = create_row(mframe1,
                     "   ")
 row6 = create_row(mframe1,
                     "Number of y divisions for discretisation:",
-                    "3 elements is recommended to enable pressure surface plotting, \nnote only central " \
-                    "row of elements is used to calculate Ps",
+                    "3 elements is recommended to enable pressure surface plotting, \nnote only " \
+                    "central row of elements is used to calculate Ps",
                     "   ")
 row7 = create_row(mframe1,
                     "Number of z divisions for discretisation:",
                     "",
                     "   ")
 
-# ==============================================================================
+# ==================================================================================================
 # GUI Inputs - Wheel Loading
-# ==============================================================================
+# ==================================================================================================
 
 mframe2 = create_mframe(scrollframe)
 tk.Label(mframe2, text="Input - Wheel Loading", font=("Arial", 10, "bold"), anchor="w", 
@@ -644,9 +896,9 @@ frame8.grid_columnconfigure(1, weight=1)
 tk.Label(mframe2, text="Note: x-y plane assumed centered on origin at (0,0)").pack(
     anchor="w", pady=(2,2))
 
-# ==============================================================================
+# ==================================================================================================
 # GUI Outputs - Results
-# ==============================================================================
+# ==================================================================================================
 
 mframe3 = create_mframe(scrollframe)
 tk.Label(mframe3, text="Output - Results", font=("Arial", 10, "bold"), anchor="w", 
@@ -665,7 +917,8 @@ row12 = create_row(mframe3,
 
 frame9 = tk.Frame(mframe3)
 frame9.pack(fill="x", pady=2)
-button9 = tk.Button(frame9, text="Solve for Pressures & Traffic Surcharge", command=solve)
+button9 = tk.Button(frame9, text="Solve for Pressures & Traffic Surcharge", 
+                    command=solve_gui)
 button9.grid(row=0, column=0, sticky="ew")
 frame9.rowconfigure(0, weight=1)
 frame9.columnconfigure(0, weight=1)
@@ -679,7 +932,8 @@ frame10.columnconfigure(0, weight=1)
 
 frame13 = tk.Frame(mframe3)
 frame13.pack(fill="x", pady=2)
-button13 = tk.Button(frame13, text="Save Traffic Surcharge Ps to File", command=save_traffic_surcharge)
+button13 = tk.Button(frame13, text="Save Traffic Surcharge Ps to File", 
+                     command=save_traffic_surcharge)
 button13.grid(row=0, column=0, sticky="ew")
 frame13.rowconfigure(0, weight=1)
 frame13.columnconfigure(0, weight=1)
@@ -706,13 +960,34 @@ tk.Label(frame17, text="m", anchor="w").grid(row=0, column=2, sticky="w", padx=(
 frame17.grid_columnconfigure(0, weight=1)
 frame17.grid_columnconfigure(1, weight=0)
 
+frame18 = tk.Frame(mframe3)
+frame18.pack(fill="x", pady=(10, 2))
+label18 = tk.Label(frame18, text="In addition to user wheel loads, also plot:", anchor="w",
+                   justify="left")
+label18.pack(fill="x", pady=2)
+
+row19, var19 = create_row_check(mframe3, "DMRB Main Road Loading")
+row20, var20 = create_row_check(mframe3, "DMRB Filter Drain Loading")
+row21, var21 = create_row_check(mframe3, "DMRB Field Loading")
+row22, var22 = create_row_check(mframe3, "BS 9295 10t static wheel, dynamic factor 2.0, 300kPa " \
+"contact pressure")
+row23, var23 = create_row_check(mframe3, "BS 9295 10t static wheel, dynamic factor 2.0, 700kPa " \
+"contact pressure")
+row24, var24 = create_row_check(mframe3, "BS 9295 30t static wheel, dynamic factor 2.0, 300kPa " \
+"contact pressure")
+row25, var25 = create_row_check(mframe3, "BS 9295 30t static wheel, dynamic factor 2.0, 700kPa " \
+"contact pressure")
+row26, var26 = create_row_check(mframe3, "Eurocode Load Model 1")
+row27, var27 = create_row_check(mframe3, "Eurocode Load Model 2")
 
 def on_plot():
+    """Obtains inputs from GUI and calls plot_results() for 3D plots"""
     y_value = combobox17.get()
     z_value = combobox14.get()
     if not (y_value and z_value):
         return
     plot_results(float(y_value), float(z_value))
+    return
 
 frame15 = tk.Frame(mframe3)
 frame15.pack(fill="x", pady=2)
@@ -722,13 +997,13 @@ button15.grid(row=0, column=0, sticky="ew")
 frame15.rowconfigure(0, weight=1)
 frame15.columnconfigure(0, weight=1)
 
-fig15 = Figure(figsize=(8, 12))
+fig15 = Figure(figsize=(8, 16))
 ax1 = fig15.add_subplot(111)
 plotcanvas15 = FigureCanvasTkAgg(fig15, master=mframe3)
 plotcanvas15.draw()
 plotcanvas15.get_tk_widget().pack(fill="both", expand=True)
 
-fig16 = Figure(figsize=(8, 12))
+fig16 = Figure(figsize=(16, 8))
 ax3 = fig16.add_subplot(111)
 plotcanvas16 = FigureCanvasTkAgg(fig16, master=mframe3)
 plotcanvas16.draw()
@@ -742,7 +1017,7 @@ row4.insert(0, "2")
 row5.insert(0, "20")
 row6.insert(0, "3")
 row7.insert(0, "16")
-entry8.insert(0, "[[-0.45, 0, 60], [0.45, 0, 60]]")
+entry8.insert(0, "[[-0.5, 0, 60], [0.5, 0, 60]]")
 row12.insert(0, "1")
 
 # Create root window

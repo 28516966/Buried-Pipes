@@ -1,6 +1,32 @@
-# ==============================================================================
+"""
+====================================================================================================
+Technical Basis
+====================================================================================================
+DMRB loads are taken from CD 533.
+Eurocode loads are taken from BS 9295.
+Historic loads are taken from Young and O'Reilly (1983).
+
+It should be noted that the charts for construction vehicle loading produced by Young and O'Reilly
+(1983) and reproduced in BS 9295 will produce different results than this code. This is because this
+code discretises wheel loads over an assumed circular contact area into ten different elements after
+Nath (1981). However, Young and O'Reilly pressures appear to be obtained by discretising each wheel
+load into quadrants.
+
+====================================================================================================
+References
+====================================================================================================
+British Standards Institution (2023). BS 9295 AMD 1. Guide to the Structural Design of Buried 
+    Pipelines.
+Nath, P. (1981). Pressures on Buried Pipes Due to Revised HB Loading.
+National Highways. (2025). CD 533 V1.2.0 Determination of pipe and bedding combinations for drainage 
+    works.
+Young, O.C. and O’Reilly, M.P. (1983). A Guide to Design Loadings for Buried Rigid Pipes.
+Young, O. and Trott, J. (1984). Buried Rigid Pipes. CRC Press.
+"""
+
+# ==================================================================================================
 # Imports
-# ==============================================================================
+# ==================================================================================================
 import csv
 import json
 import math
@@ -15,9 +41,9 @@ from tkinter import filedialog
 # from mpl_toolkits.mplot3d import Axes3D
 # from matplotlib.widgets import Slider
 
-# ==============================================================================
+# ==================================================================================================
 # Hard Coded Reference Loads
-# ==============================================================================
+# ==================================================================================================
 # L1 prefix denotes wheel loads represented by points
 # Otherwise loads have been discretised into 10 point loads per wheel using contact pressure and
 # assuming a circular contact area
@@ -153,10 +179,9 @@ ref_loads = {
                      [0.745, 2.355, 12.5]]
 }
 
-
-# ==============================================================================
+# ==================================================================================================
 # Class for Model Parameters and Methods
-# ==============================================================================
+# ==================================================================================================
 
 class PipePressures:
     def __init__(self):
@@ -285,7 +310,9 @@ def solve_gui():
     return
 
 def solve_Ps(loads):
-    # solver returning class object with no interaction from gui
+    """Create instance of class PipePressures(), solve, and return design construction surcharge
+    pressure, Ps. This is distinct from solve_gui() since it avoids invoking global variable
+    'solution' and does not update GUI comboboxes."""
     sol_gen = PipePressures()
     x = float(row1.get())
     y = float(row2.get())
@@ -295,9 +322,7 @@ def solve_Ps(loads):
     ydivs = int(row6.get())
     zdivs = int(row7.get())
     sol_gen.mesh(x, y, z, xdivs, ydivs, zdivs, zmin=zmin)
-    # Read and set wheel loads
     sol_gen.wheel_loads(loads)
-    # Solve
     sol_gen.boussinesq_pressure()
     sol_gen.design_pressure_Ps(float(row12.get()))
     z_res = [row[0] for row in sol_gen.results_Ps]
@@ -418,6 +443,7 @@ def plot_results(y, z):
             color='lightgray')
     
     def ref_plot(ax, ref_load, label, cover_on_y=True, style="--", marker="x"):
+        """Add results from reference loads to plot"""
         global ref_loads
         if cover_on_y is True:
             y, x = solve_Ps(ref_loads[ref_load])
@@ -426,7 +452,6 @@ def plot_results(y, z):
         ax.plot(x, y, label=label, linewidth=0.5, linestyle=style, marker=marker)
         return
     
-    # Also solve for user-checked reference loads
     if var19.get() is True:
         ref_plot(ax1, "DMRBMainRoad1", "DMRB Main Road (straddle)")
         ref_plot(ax1, "DMRBMainRoad2", "DMRB Main Road (axle over crown)")
@@ -708,13 +733,13 @@ class Tooltip:
             self.tooltip_window.destroy()
             self.tooltip_window = None
 
-# ==============================================================================
+# ==================================================================================================
 # GUI
-# ==============================================================================
+# ==================================================================================================
 
-# ==============================================================================
+# ==================================================================================================
 # Root Window and Main Frames
-# ==============================================================================
+# ==================================================================================================
 
 root = tk.Tk()
 root.title("Traffic Pressures on Pipes")
@@ -750,9 +775,9 @@ tk.Label(scrollframe,
               "consideration of pipe diameter, bedding, or tyre contact area.",
          wraplength=620, justify="left", anchor="w").pack(fill="x", padx=10, pady=(0,10))
 
-# ==============================================================================
+# ==================================================================================================
 # Helper Functions for GUI Elements
-# ==============================================================================
+# ==================================================================================================
 
 def create_mframe(parent):
     """Create a frame"""
@@ -779,6 +804,7 @@ def create_row(frame, label_text, tooltip_text=None, unit_text=None, entry_width
     return row_entry
 
 def create_row_check(frame, label_text, variable=None):
+    """Create a row with a label and checkbutton"""
     if variable is None:
         variable = tk.BooleanVar(value=False)
     row_frame = tk.Frame(frame)
@@ -792,9 +818,9 @@ def create_row_check(frame, label_text, variable=None):
     row_frame.grid_columnconfigure(1, weight=0)
     return checkbutton, variable
 
-# ==============================================================================
+# ==================================================================================================
 # GUI Inputs - Spatial Domain Parameters
-# ==============================================================================
+# ==================================================================================================
 
 mframe1 = create_mframe(scrollframe)
 tk.Label(mframe1, text="Input - Spatial Domain Parameters",
@@ -836,9 +862,9 @@ row7 = create_row(mframe1,
                     "",
                     "   ")
 
-# ==============================================================================
+# ==================================================================================================
 # GUI Inputs - Wheel Loading
-# ==============================================================================
+# ==================================================================================================
 
 mframe2 = create_mframe(scrollframe)
 tk.Label(mframe2, text="Input - Wheel Loading", font=("Arial", 10, "bold"), anchor="w", 
@@ -865,9 +891,9 @@ frame8.grid_columnconfigure(1, weight=1)
 tk.Label(mframe2, text="Note: x-y plane assumed centered on origin at (0,0)").pack(
     anchor="w", pady=(2,2))
 
-# ==============================================================================
+# ==================================================================================================
 # GUI Outputs - Results
-# ==============================================================================
+# ==================================================================================================
 
 mframe3 = create_mframe(scrollframe)
 tk.Label(mframe3, text="Output - Results", font=("Arial", 10, "bold"), anchor="w", 
@@ -950,11 +976,13 @@ row26, var26 = create_row_check(mframe3, "Eurocode Load Model 1")
 row27, var27 = create_row_check(mframe3, "Eurocode Load Model 2")
 
 def on_plot():
+    """Obtains inputs from GUI and calls plot_results() for 3D plots"""
     y_value = combobox17.get()
     z_value = combobox14.get()
     if not (y_value and z_value):
         return
     plot_results(float(y_value), float(z_value))
+    return
 
 frame15 = tk.Frame(mframe3)
 frame15.pack(fill="x", pady=2)

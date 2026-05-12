@@ -37,6 +37,7 @@ import json
 import math
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.colors import LogNorm
 from matplotlib.ticker import FixedLocator, FormatStrFormatter, NullFormatter
 import numpy as np
 import tkinter as tk
@@ -383,17 +384,6 @@ def plot_results(y, z):
     # Set up fig15
     val_z = np_results_Ps[:, 0]
     val_Ps = np_results_Ps[:, 1]
-    val_x = solution.x_arr
-    val_y = solution.y_arr
-    val_X, val_Y = np.meshgrid(val_x, val_y)
-    res = np_res_p[np_res_p[:, 0] == z]
-    val_Z = np.zeros_like(val_X, dtype=float)
-    for row in range(val_X.shape[0]):
-        for col in range(val_X.shape[1]):
-            for j in res:
-                if (val_X[row, col] == j[2]) and (val_Y[row, col] == j[1]):
-                    val_Z[row, col] = j[3]
-                    break
     global fig15
     fig15.clear()
     ax1 = fig15.add_subplot(1, 2, 1)
@@ -413,7 +403,7 @@ def plot_results(y, z):
             linestyle=':',
             linewidth=0.5,
             color='lightgray')
-    ax2.plot(val_z, val_Ps, linewidth=1, linestyle="-", marker="o")
+    ax2.plot(val_z, val_Ps, linewidth=1, linestyle="-", marker="o", label="User input")
     ax2.set_title("Design Surcharge Pressure Ps with Depth")
     ax2.set_xscale("log")
     ax2.set_yscale("log")
@@ -493,42 +483,107 @@ def plot_results(y, z):
     fig15.subplots_adjust(wspace=0.2, bottom=0.25)
     plotcanvas15.draw()
 
-    # Set up fig16   
-    val_x2 = solution.x_arr
-    val_z2 = solution.z_arr
-    val_X2, val_Y2 = np.meshgrid(val_x2, val_z2)
-    res2 = np_res_p[np_res_p[:, 1] == y]
-    val_Z2 = np.zeros_like(val_X2, dtype=float)
-    for row in range(val_X2.shape[0]):
-        for col in range(val_X2.shape[1]):
-            for j in res2: # Z, Y, X, Pressure
-                if (val_X2[row, col] == j[2]) and (val_Y2[row, col] == j[0]):
-                    val_Z2[row, col] = j[3]
-                    break
+    # Set up fig16
+    # Variables for ax1
+    val_x0 = solution.x_arr
+    val_y0 = solution.y_arr
+    # Create meshgrid for 3D plotting, returns 2D array with grid coordinates
+    val_x, val_y = np.meshgrid(val_x0, val_y0)
+    # Flatten meshgrid arrays to 1D
+    grid_x = val_x.ravel()
+    grid_y = val_y.ravel()
+    # Extract results at specified z
+    dec = 3
+    res = np_res_p[np.round(np_res_p[:, 0], dec) == round(z, dec)]
+    # Extract x, y, v into arrays
+    res_x = res[:, 2]
+    res_y = res[:, 1]
+    res_v = res[:, 3]
+    # Put x and y into adjacent columns (stack)
+    grid_keys = np.round(np.c_[grid_x, grid_y], dec)
+    res_keys  = np.round(np.c_[res_x, res_y], dec)
+    # Create dict of (x, y) key and value v
+    res_dict = {tuple(k): v for k, v in zip(res_keys, res_v)}
+    # Get pressure values at grid points by looking up dict
+    val_z_flat = np.array([res_dict.get(tuple(k), 0.0) for k in grid_keys])
+    # Reshape flattened array
+    val_z = val_z_flat.reshape(val_x.shape)
+    
+    # Variables for ax2
+    val_z0 = solution.z_arr
+    # Create meshgrid for 3D plotting, returns 2D array with grid coordinates 
+    val_x2, val_z2 = np.meshgrid(val_x0, val_z0)
+    # Flatten meshgrid arrays to 1D
+    grid_x2 = val_x2.ravel()
+    grid_z2 = val_z2.ravel()
+    # Extract results at specified y
+    dec = 3
+    res2 = np_res_p[np.round(np_res_p[:, 1], dec) == round(y, dec)]
+    # Extract x, y, v into arrays
+    res_x2 = res2[:, 2]
+    res_z2 = res2[:, 0]
+    res_v2 = res2[:, 3]
+    # Put x and y into adjacent columns (stack)
+    grid_keys2 = np.round(np.c_[grid_x2, grid_z2], dec)
+    res_keys2  = np.round(np.c_[res_x2, res_z2], dec)
+    # Create dict of (x, y) key and value v
+    res_dict2 = {tuple(k): v for k, v in zip(res_keys2, res_v2)}
+    # Get pressure values at grid points by looking up dict
+    val_y2_flat = np.array([res_dict2.get(tuple(k), 0.0) for k in grid_keys2])
+    # Reshape flattened array
+    val_y2 = val_y2_flat.reshape(val_x2.shape)
+
     global fig16
     fig16.clear()
     ax3 = fig16.add_subplot(1, 2, 1, projection='3d')
     ax4 = fig16.add_subplot(1, 2, 2, projection='3d')
-    ax3.plot_surface(val_X, val_Y, val_Z, cmap="viridis")
+    ax3.plot_surface(val_x, val_y, val_z, cmap="viridis")
     ax3.set_title("Boussinesq Pressures Across X-Y Plane\n at Specified Depth")
     ax3.set_xlabel("x [m]")
     ax3.set_ylabel("y [m]")
     ax3.set_zlabel("Boussinesq Pressure [kPa]")
-    ax4.plot_surface(val_X2, val_Y2, val_Z2, cmap="viridis")
+    ax4.plot_surface(val_x2, val_z2, val_y2, cmap="viridis")
     ax4.set_title("Boussinesq Pressures Across X-Z Plane\n at Specified Y")
     ax4.set_xlabel("x [m]")
-    ax4.set_ylabel("z [m]")
+    ax4.set_ylabel("Cover Depth [m], H")
     ax4.set_zlabel("Boussinesq Pressure [kPa]")
     ax4.view_init(elev=30, azim=120)
     plotcanvas16.draw()
-    # fig_py = plt.figure()
-    # ax_py = fig_py.add_subplot(111, projection='3d')
-    # ax_py.plot_surface(val_X2, val_Y2, val_Z2, cmap="viridis")
-    # ax_py.set_title("Boussinesq Pressures Across X-Z Plane at Y=0")
-    # ax_py.set_xlabel("x [m]")
-    # ax_py.set_ylabel("z [m]")
-    # ax_py.set_zlabel("Boussinesq Pressure [kPa]")
-    # plt.show() 
+
+    # Set up fig28
+    global fig28
+    fig28.clear()
+    ax5 = fig28.add_subplot(111, projection='3d')
+    dec = 3
+    x5 = np.round(np_res_p[:, 2], 3)
+    y5 = np.round(np_res_p[:, 1], 3)
+    z5 = np.round(np_res_p[:, 0], 3)
+    v5 = np.round(np_res_p[:, 3], 3)
+    mid_x = np.mean([x5.min(), x5.max()])
+    mid_y = np.mean([y5.min(), y5.max()])
+    mid_z = np.mean([z5.min(), z5.max()])
+    max_range = max(np.ptp(x5), np.ptp(y5), np.ptp(z5)) / 2
+    ax5.set_xlim(mid_x - max_range, mid_x + max_range)
+    ax5.set_ylim(mid_y - max_range, mid_y + max_range)
+    ax5.set_zlim(mid_z - max_range, mid_z + max_range)
+    mask = y5 > 0
+    x5 = x5[mask]
+    y5 = y5[mask]
+    z5 = z5[mask]
+    v5 = v5[mask]
+    ax5.set_box_aspect([1,1,1])
+    sizes = 0.5 * 10 + 1.2 * 90 * (v5 - v5.min()) / (v5.max() - v5.min())
+    sc = ax5.scatter(x5, y5, z5, c=v5, s=2, cmap='jet', norm=LogNorm(vmin=v5.min(), vmax=v5.max()),
+                     alpha=0.7)
+    cbar = fig28.colorbar(sc, ax=ax5)
+    cbar.set_label("Boussinesq Pressure [kPa]")
+    ax5.set_title("Boussinesq Pressures in Half-Domain Y>=0")
+    ax5.set_xlabel("x [m]")
+    ax5.set_ylabel("y [m]")
+    ax5.set_zlabel("Cover Depth [m], H")
+    ax5.invert_zaxis()
+    plotcanvas28.draw()
+
     return
 
 
@@ -748,7 +803,7 @@ class Tooltip:
 
 root = tk.Tk()
 root.title("Traffic Pressures on Pipes")
-root.geometry("1920x1080")
+root.geometry("1280x720")
 
 mcanvas = tk.Canvas(root)
 mcanvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -997,7 +1052,7 @@ button15.grid(row=0, column=0, sticky="ew")
 frame15.rowconfigure(0, weight=1)
 frame15.columnconfigure(0, weight=1)
 
-fig15 = Figure(figsize=(8, 16))
+fig15 = Figure(figsize=(8, 12))
 ax1 = fig15.add_subplot(111)
 plotcanvas15 = FigureCanvasTkAgg(fig15, master=mframe3)
 plotcanvas15.draw()
@@ -1008,6 +1063,12 @@ ax3 = fig16.add_subplot(111)
 plotcanvas16 = FigureCanvasTkAgg(fig16, master=mframe3)
 plotcanvas16.draw()
 plotcanvas16.get_tk_widget().pack(fill="both", expand=True)
+
+fig28 = Figure(figsize=(8,8))
+ax5 = fig28.add_subplot(111)
+plotcanvas28 = FigureCanvasTkAgg(fig28, master=mframe3)
+plotcanvas28.draw()
+plotcanvas28.get_tk_widget().pack(fill="both", expand=True)
 
 # Default values
 row1.insert(0, "2")

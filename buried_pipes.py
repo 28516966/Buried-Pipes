@@ -383,17 +383,6 @@ def plot_results(y, z):
     # Set up fig15
     val_z = np_results_Ps[:, 0]
     val_Ps = np_results_Ps[:, 1]
-    val_x = solution.x_arr
-    val_y = solution.y_arr
-    val_X, val_Y = np.meshgrid(val_x, val_y)
-    res = np_res_p[np_res_p[:, 0] == z]
-    val_Z = np.zeros_like(val_X, dtype=float)
-    for row in range(val_X.shape[0]):
-        for col in range(val_X.shape[1]):
-            for j in res:
-                if (val_X[row, col] == j[2]) and (val_Y[row, col] == j[1]):
-                    val_Z[row, col] = j[3]
-                    break
     global fig15
     fig15.clear()
     ax1 = fig15.add_subplot(1, 2, 1)
@@ -413,7 +402,7 @@ def plot_results(y, z):
             linestyle=':',
             linewidth=0.5,
             color='lightgray')
-    ax2.plot(val_z, val_Ps, linewidth=1, linestyle="-", marker="o")
+    ax2.plot(val_z, val_Ps, linewidth=1, linestyle="-", marker="o", label="User input")
     ax2.set_title("Design Surcharge Pressure Ps with Depth")
     ax2.set_xscale("log")
     ax2.set_yscale("log")
@@ -493,7 +482,18 @@ def plot_results(y, z):
     fig15.subplots_adjust(wspace=0.2, bottom=0.25)
     plotcanvas15.draw()
 
-    # Set up fig16   
+    # Set up fig16
+    val_x = solution.x_arr
+    val_y = solution.y_arr
+    val_X, val_Y = np.meshgrid(val_x, val_y)
+    res = np_res_p[np_res_p[:, 0] == z]
+    val_Z = np.zeros_like(val_X, dtype=float)
+    for row in range(val_X.shape[0]):
+        for col in range(val_X.shape[1]):
+            for j in res:
+                if (val_X[row, col] == j[2]) and (val_Y[row, col] == j[1]):
+                    val_Z[row, col] = j[3]
+                    break
     val_x2 = solution.x_arr
     val_z2 = solution.z_arr
     val_X2, val_Y2 = np.meshgrid(val_x2, val_z2)
@@ -748,7 +748,7 @@ class Tooltip:
 
 root = tk.Tk()
 root.title("Traffic Pressures on Pipes")
-root.geometry("1920x1080")
+root.geometry("1280x720")
 
 mcanvas = tk.Canvas(root)
 mcanvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -997,7 +997,7 @@ button15.grid(row=0, column=0, sticky="ew")
 frame15.rowconfigure(0, weight=1)
 frame15.columnconfigure(0, weight=1)
 
-fig15 = Figure(figsize=(8, 16))
+fig15 = Figure(figsize=(8, 12))
 ax1 = fig15.add_subplot(111)
 plotcanvas15 = FigureCanvasTkAgg(fig15, master=mframe3)
 plotcanvas15.draw()

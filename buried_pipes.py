@@ -26,7 +26,7 @@ Young, O. and Trott, J. (1984). Buried Rigid Pipes. CRC Press.
 ====================================================================================================
 Build Instructions
 ====================================================================================================
-pyinstaller --onefile --noconsole --name "Traffic Pressures on Buried Pipes" buried_pipes.py
+pyinstaller --onefile --noconsole --name "buried_pipes_traffic_pressure" buried_pipes.py
 """
 
 # ==================================================================================================
@@ -35,9 +35,10 @@ pyinstaller --onefile --noconsole --name "Traffic Pressures on Buried Pipes" bur
 import csv
 import json
 import math
-from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.colors import LogNorm
+from matplotlib.cm import ScalarMappable
+from matplotlib.figure import Figure
 from matplotlib.ticker import FixedLocator, FormatStrFormatter, NullFormatter
 import numpy as np
 import tkinter as tk
@@ -484,112 +485,214 @@ def plot_results(y, z):
     plotcanvas15.draw()
 
     # Set up fig16
-    # Variables for ax1
+    # Variables for ax3
     val_x0 = solution.x_arr
     val_y0 = solution.y_arr
-    # Create meshgrid for 3D plotting, returns 2D array with grid coordinates
     val_x, val_y = np.meshgrid(val_x0, val_y0)
-    # Flatten meshgrid arrays to 1D
     grid_x = val_x.ravel()
     grid_y = val_y.ravel()
-    # Extract results at specified z
     dec = 3
     res = np_res_p[np.round(np_res_p[:, 0], dec) == round(z, dec)]
-    # Extract x, y, v into arrays
     res_x = res[:, 2]
     res_y = res[:, 1]
     res_v = res[:, 3]
-    # Put x and y into adjacent columns (stack)
     grid_keys = np.round(np.c_[grid_x, grid_y], dec)
     res_keys  = np.round(np.c_[res_x, res_y], dec)
-    # Create dict of (x, y) key and value v
     res_dict = {tuple(k): v for k, v in zip(res_keys, res_v)}
-    # Get pressure values at grid points by looking up dict
-    val_z_flat = np.array([res_dict.get(tuple(k), 0.0) for k in grid_keys])
-    # Reshape flattened array
-    val_z = val_z_flat.reshape(val_x.shape)
+    val_v_flat = np.array([res_dict.get(tuple(k), 0.0) for k in grid_keys])
+    val_v = val_v_flat.reshape(val_x.shape)
+    i_peak = np.argmax(res_v)
+    x_peak = res_x[i_peak]
+    y_peak = res_y[i_peak]
+    v_peak = res_v[i_peak]
     
-    # Variables for ax2
+    # Variables for ax4
     val_z0 = solution.z_arr
-    # Create meshgrid for 3D plotting, returns 2D array with grid coordinates 
     val_x2, val_z2 = np.meshgrid(val_x0, val_z0)
-    # Flatten meshgrid arrays to 1D
     grid_x2 = val_x2.ravel()
     grid_z2 = val_z2.ravel()
-    # Extract results at specified y
     dec = 3
     res2 = np_res_p[np.round(np_res_p[:, 1], dec) == round(y, dec)]
-    # Extract x, y, v into arrays
     res_x2 = res2[:, 2]
     res_z2 = res2[:, 0]
     res_v2 = res2[:, 3]
-    # Put x and y into adjacent columns (stack)
     grid_keys2 = np.round(np.c_[grid_x2, grid_z2], dec)
     res_keys2  = np.round(np.c_[res_x2, res_z2], dec)
-    # Create dict of (x, y) key and value v
     res_dict2 = {tuple(k): v for k, v in zip(res_keys2, res_v2)}
-    # Get pressure values at grid points by looking up dict
-    val_y2_flat = np.array([res_dict2.get(tuple(k), 0.0) for k in grid_keys2])
-    # Reshape flattened array
-    val_y2 = val_y2_flat.reshape(val_x2.shape)
+    val_v2_flat = np.array([res_dict2.get(tuple(k), 0.0) for k in grid_keys2])
+    val_v2 = val_v2_flat.reshape(val_x2.shape)
+    i_peak2 = np.argmax(res_v2)
+    x_peak2 = res_x2[i_peak2]
+    z_peak2 = res_z2[i_peak2]
+    v_peak2 = res_v2[i_peak2]
 
     global fig16
     fig16.clear()
     ax3 = fig16.add_subplot(1, 2, 1, projection='3d')
     ax4 = fig16.add_subplot(1, 2, 2, projection='3d')
-    ax3.plot_surface(val_x, val_y, val_z, cmap="viridis")
+    ax3.plot_surface(val_x, val_y, val_v, cmap="viridis")
     ax3.set_title("Boussinesq Pressures Across X-Y Plane\n at Specified Depth")
     ax3.set_xlabel("x [m]")
     ax3.set_ylabel("y [m]")
     ax3.set_zlabel("Boussinesq Pressure [kPa]")
-    ax4.plot_surface(val_x2, val_z2, val_y2, cmap="viridis")
+    ax3.text(x_peak, y_peak, v_peak, f"{v_peak:.2f}", color="black", fontsize=10)
+    ax4.plot_surface(val_x2, val_z2, val_v2, cmap="viridis")
     ax4.set_title("Boussinesq Pressures Across X-Z Plane\n at Specified Y")
     ax4.set_xlabel("x [m]")
     ax4.set_ylabel("Cover Depth [m], H")
     ax4.set_zlabel("Boussinesq Pressure [kPa]")
+    ax4.text(x_peak2, z_peak2, v_peak2, f"{v_peak2:.2f}", color="black", fontsize=10)
     ax4.view_init(elev=30, azim=120)
     plotcanvas16.draw()
 
     # Set up fig28
-    global fig28
+    global fig28, fig28_state
     fig28.clear()
     ax5 = fig28.add_subplot(111, projection='3d')
-    dec = 3
-    x5 = np.round(np_res_p[:, 2], 3)
-    y5 = np.round(np_res_p[:, 1], 3)
-    z5 = np.round(np_res_p[:, 0], 3)
-    v5 = np.round(np_res_p[:, 3], 3)
-    mid_x = np.mean([x5.min(), x5.max()])
-    mid_y = np.mean([y5.min(), y5.max()])
-    mid_z = np.mean([z5.min(), z5.max()])
-    max_range = max(np.ptp(x5), np.ptp(y5), np.ptp(z5)) / 2
+    fig28.set_constrained_layout(True)
+    dec = 3 
+    # Set data and store in persistent dict
+    x5_all = np.round(np_res_p[:, 2], 3)
+    y5_all = np.round(np_res_p[:, 1], 3)
+    z5_all = np.round(np_res_p[:, 0], 3)
+    v5_all = np.round(np_res_p[:, 3], 3)
+    fig28_state["x"] = x5_all
+    fig28_state["y"] = y5_all
+    fig28_state["z"] = z5_all
+    fig28_state["v"] = v5_all
+    # Set axis bounds and initial mask
+    mid_x = np.mean([x5_all.min(), x5_all.max()])
+    mid_y = np.mean([y5_all.min(), y5_all.max()])
+    mid_z = np.mean([z5_all.min(), z5_all.max()])
+    max_range = max(np.ptp(x5_all), np.ptp(y5_all), np.ptp(z5_all)) / 2
     ax5.set_xlim(mid_x - max_range, mid_x + max_range)
     ax5.set_ylim(mid_y - max_range, mid_y + max_range)
     ax5.set_zlim(mid_z - max_range, mid_z + max_range)
-    mask = y5 > 0
-    x5 = x5[mask]
-    y5 = y5[mask]
-    z5 = z5[mask]
-    v5 = v5[mask]
+    initial_y_cutoff = 0
+    initial_z_cutoff = z5_all[0]
+    mask = (y5_all > initial_y_cutoff) & (z5_all > initial_z_cutoff)
     ax5.set_box_aspect([1,1,1])
-    sizes = 0.5 * 10 + 1.2 * 90 * (v5 - v5.min()) / (v5.max() - v5.min())
-    sc = ax5.scatter(x5, y5, z5, c=v5, s=2, cmap='jet', norm=LogNorm(vmin=v5.min(), vmax=v5.max()),
-                     alpha=0.7)
-    cbar = fig28.colorbar(sc, ax=ax5)
-    cbar.set_label("Boussinesq Pressure [kPa]")
-    ax5.set_title("Boussinesq Pressures in Half-Domain Y>=0")
+    initial_marker_size = 2
+    norm=LogNorm(vmin=v5_all.min(), vmax=v5_all.max())
+    sc = ax5.scatter(
+        x5_all[mask],
+        y5_all[mask],
+        z5_all[mask],
+        c=v5_all[mask],
+        s=initial_marker_size,
+        cmap='jet',
+        norm=norm,
+        alpha=0.7
+    )
+    fig28_state["sc"] = sc
+    ax5.set_title("Boussinesq Pressures in 3D Spatial Domain")
     ax5.set_xlabel("x [m]")
     ax5.set_ylabel("y [m]")
     ax5.set_zlabel("Cover Depth [m], H")
     ax5.invert_zaxis()
-    plotcanvas28.draw()
+    # cbar = fig28.colorbar(sc, ax=ax5)
+    # cbar.set_label("Boussinesq Pressure [kPa]")
+    cbar_ax = fig28.add_axes([0.88, 0.2, 0.03, 0.6])
+    sm = ScalarMappable(norm=norm, cmap='jet')
+    sm.set_array([])
+    cbar = fig28.colorbar(sm, cax=cbar_ax)
+    cbar.set_label("Boussinesq Pressure [kPa]")
 
+    # Create callback functions to update plot based on sliders
+    def update_marker_size(value):
+        """Update marker size of fig28 (3D plot)"""
+        sc = fig28_state["sc"]
+        v5_all = fig28_state["v"]
+        size = float(value)
+        sc.set_sizes(np.full(len(v5_all), size))
+        plotcanvas28.draw_idle()
+        return
+
+    def update_y_mask(value):
+        """Update y mask of fig28 (3D plot)"""
+        fig28_state["y_cutoff"] = float(value)
+        apply_masks()
+        return
+    
+    def update_z_mask(value):
+        """Update z mask of fig28 (3D plot)"""
+        fig28_state["z_cutoff"] = float(value)
+        apply_masks()
+        return
+    
+    def apply_masks():
+        """Update masks of fig28 (3D plot)"""
+        sc = fig28_state["sc"]
+        x5_all = fig28_state["x"]
+        y5_all = fig28_state["y"]
+        z5_all = fig28_state["z"]
+        v5_all = fig28_state["v"]
+        y_cutoff = fig28_state["y_cutoff"]
+        z_cutoff = fig28_state["z_cutoff"]
+        if fig28_state.get("label_mask_y") is not None:
+            fig28_state["label_mask_y"].config(text=f"Y Cutoff: {y_cutoff:.2f}")
+        if fig28_state.get("label_mask_z") is not None:
+            fig28_state["label_mask_z"].config(text=f"Z Cutoff: {z_cutoff:.2f}")
+        mask = (y5_all > y_cutoff) & (z5_all > z_cutoff)
+        x = x5_all[mask]
+        y = y5_all[mask]
+        z = z5_all[mask]
+        v = v5_all[mask]
+        sc._offsets3d = (x, y, z)
+        sc.set_array(v)
+        plotcanvas28.draw_idle()
+        return
+
+    # If no sliders then create them and save to persistent dict for future update on callback
+    if fig28_state["slider_size"] is None: # Marker size slider
+        fig28_state["label_size"] = ttk.Label(mframe6, text="Marker Size")
+        fig28_state["label_size"].pack(fill="x", pady=2)
+        fig28_state["slider_size"] = ttk.Scale(
+            mframe6,
+            from_=1,
+            to=100,
+            orient="horizontal",
+            command=update_marker_size
+        )
+        fig28_state["slider_size"].pack(fill="x", pady=5)
+        fig28_state["slider_size"].set(20)
+
+    if fig28_state["slider_mask_y"] is None: # Mask y slider
+        fig28_state["label_mask_y"] = ttk.Label(mframe6, text="Y Cutoff: 0.00")
+        fig28_state["label_mask_y"].pack(fill="x", pady=2)
+        fig28_state["slider_mask_y"] = ttk.Scale(
+            mframe6,
+            from_=y5_all.min(),
+            to=y5_all.max(),
+            orient="horizontal",
+            command=update_y_mask
+        )
+        fig28_state["slider_mask_y"].pack(fill="x", pady=5)
+        y_med = 0.5 * (y5_all.min() + y5_all.max())
+        fig28_state["y_cutoff"] = y_med
+        fig28_state["slider_mask_y"].set(y_med)
+        
+
+    if fig28_state["slider_mask_z"] is None: # Mask z slider
+        fig28_state["label_mask_z"] = ttk.Label(mframe6, text=f"Z Cutoff: {z5_all[0]:.2f}")
+        fig28_state["label_mask_z"].pack(fill="x", pady=2)
+        fig28_state["slider_mask_z"] = ttk.Scale(
+            mframe6,
+            from_=z5_all.min(),
+            to=z5_all.max(),
+            orient="horizontal",
+            command=update_z_mask
+        )
+        fig28_state["slider_mask_z"].pack(fill="x", pady=5)
+        fig28_state["z_cutoff"] = z5_all.min()
+        fig28_state["slider_mask_z"].set(z5_all.min())
     return
 
 
-def discretise_wheel(load, pressure, x=0, y=0, r1r2=0.5):
+def discretise_wheel(load, pressure, x=0, y=0, n=10, r1r2=0.5):
     """Converts a point wheel load and contact pressure into a patch load over a circular area, then
-    discretises this into a set of 10 point loads (4 quadrants, and 6 annular sectors)
+    discretises this into a set of n point loads (eitheer 4 quadrants, and 6 annular sectors or just
+    4 quadrants)
 
     Args:
         load (float): Overall point load of wheel [kN]
@@ -603,25 +706,32 @@ def discretise_wheel(load, pressure, x=0, y=0, r1r2=0.5):
     """
     area = load / pressure
     r2 = (area / math.pi) ** 0.5
-    r1 = r1r2 * r2
-    a_quad = 0.25 * math.pi * r1**2
-    y_quad = 4 * r1 / (3 * math.pi)
-    p_quad = a_quad / area * load
-    alpha = 2 * math.pi / 12
-    a_sect = alpha * (r2**2 - r1**2)
-    y_sect = 2 * math.sin(alpha) * (r2**3 - r1**3) / (3 * alpha * (r2**2 - r1**2))
-    x1_sect = y_sect * math.cos(alpha)
-    y1_sect = y_sect * math.cos(alpha)
-    p_sect = a_sect / area * load
-    result = [[x + y_quad, y + y_quad, p_quad], [x - y_quad, y + y_quad, p_quad], 
-            [x - y_quad, y - y_quad, p_quad], [x + y_quad, y - y_quad, p_quad], 
-            [x + x1_sect, y + y1_sect, p_sect], [x, y + y_sect, p_sect],
-            [x - x1_sect, y + y1_sect, p_sect], [x - x1_sect, y - y1_sect, p_sect],
-            [x, y - y_sect, p_sect], [x + x1_sect, y - y1_sect, p_sect]]
+    if n == 4:
+        a_quad = 0.25 * math.pi * r2**2
+        y_quad = 4 * r2 / (3 * math.pi)
+        p_quad = a_quad / area * load
+        result = [[x + y_quad, y + y_quad, p_quad], [x - y_quad, y + y_quad, p_quad],
+                  [x - y_quad, y - y_quad, p_quad], [x + y_quad, y - y_quad, p_quad]]
+    else:
+        r1 = r1r2 * r2
+        a_quad = 0.25 * math.pi * r1**2
+        y_quad = 4 * r1 / (3 * math.pi)
+        p_quad = a_quad / area * load
+        alpha = 2 * math.pi / 12
+        a_sect = alpha * (r2**2 - r1**2)
+        y_sect = 2 * math.sin(alpha) * (r2**3 - r1**3) / (3 * alpha * (r2**2 - r1**2))
+        x1_sect = y_sect * math.cos(alpha)
+        y1_sect = y_sect * math.cos(alpha)
+        p_sect = a_sect / area * load
+        result = [[x + y_quad, y + y_quad, p_quad], [x - y_quad, y + y_quad, p_quad], 
+                [x - y_quad, y - y_quad, p_quad], [x + y_quad, y - y_quad, p_quad], 
+                [x + x1_sect, y + y1_sect, p_sect], [x, y + y_sect, p_sect],
+                [x - x1_sect, y + y1_sect, p_sect], [x - x1_sect, y - y1_sect, p_sect],
+                [x, y - y_sect, p_sect], [x + x1_sect, y - y1_sect, p_sect]]
     rounded = [[round(value, 3) for value in row] for row in result]
     return rounded
 
-def convert_patch_loads(widget, wheel_loads, contact_pressure):
+def convert_patch_loads(widget, wheel_loads, contact_pressure, n):
     """Runs input wheel loads through discretise_wheel() function and adds results to GUI window
     for user to copy
 
@@ -633,7 +743,7 @@ def convert_patch_loads(widget, wheel_loads, contact_pressure):
     output = []
     for wheel in wheel_loads:
         output.extend(discretise_wheel(wheel[2], contact_pressure, x=wheel[0], 
-                                       y=wheel[1]))
+                                       y=wheel[1], n=n))
     widget.delete("1.0", "end")
     widget.insert("1.0", str(output))
     return
@@ -718,11 +828,27 @@ def show_load_dialog():
     p_entry3 = tk.Entry(p_frame3, width=15)
     p_entry3.pack(side="right", padx=5)
 
+    p_frame6 = tk.Frame(popup)
+    p_frame6.pack(fill="x", padx=10, pady=(5,10))
+    p_frame6a = tk.Frame(p_frame6)
+    p_frame6a.pack(side="left", fill="x")
+    p_frame6b = tk.Frame(p_frame6, width=15)
+    p_frame6b.pack(side="right", fill="x")
+    tk.Label(p_frame6a, text="Number of points to discretise to\neither 4 total = 4 quadrants\n" \
+    "or 10 total = 4 inner quadrants + 6 outer annular sectors", justify="left").pack(side="left")
+    n = tk.IntVar()
+    p_rbutton6a = ttk.Radiobutton(p_frame6b, text="4", variable=n, value=4)
+    p_rbutton6a.pack(side="left", fill="x")
+    p_rbutton6b = ttk.Radiobutton(p_frame6b, text="10", variable=n, value=10)
+    p_rbutton6b.pack(side="right", fill="x")
+    # p_entry6 = tk.Entry(p_frame6, width=15)
+    # p_entry6.pack(side="right", padx=5)
+
     p_frame4 = tk.Frame(popup)
     p_frame4.pack(fill="x", pady=2)
-    p_button4 = tk.Button(p_frame4, text="Discretize wheel patch loading into set of 10 point " \
+    p_button4 = tk.Button(p_frame4, text="Discretize wheel patch loading into set of n point " \
     "loads (assuming circular contact patch)", command=lambda: convert_patch_loads(
-        p_text5, json.loads(p_entry2.get()), float(p_entry3.get())))
+        p_text5, json.loads(p_entry2.get()), float(p_entry3.get()), n=n.get()))
     p_button4.grid(row=0, column=0, sticky="ew")
     p_frame4.rowconfigure(0, weight=1)
     p_frame4.columnconfigure(0, weight=1)
@@ -839,10 +965,10 @@ tk.Label(scrollframe,
 # Helper Functions for GUI Elements
 # ==================================================================================================
 
-def create_mframe(parent):
+def create_mframe(parent, pady_ext=5):
     """Create a frame"""
     frame = tk.Frame(parent, bd=1, relief="solid", padx=0, pady=0)
-    frame.pack(fill="x", padx=10, pady=5)
+    frame.pack(fill="x", padx=10, pady=pady_ext)
     return frame
 
 def create_row(frame, label_text, tooltip_text=None, unit_text=None, entry_width=15):
@@ -1046,38 +1172,57 @@ def on_plot():
 
 frame15 = tk.Frame(mframe3)
 frame15.pack(fill="x", pady=2)
-button15 = tk.Button(frame15, text="Generate Results Plots", 
-                     command=on_plot)
+button15 = tk.Button(frame15, text="Generate Results Plots", command=on_plot)
 button15.grid(row=0, column=0, sticky="ew")
 frame15.rowconfigure(0, weight=1)
 frame15.columnconfigure(0, weight=1)
 
+mframe4 = create_mframe(scrollframe, pady_ext=0)
 fig15 = Figure(figsize=(8, 12))
 ax1 = fig15.add_subplot(111)
-plotcanvas15 = FigureCanvasTkAgg(fig15, master=mframe3)
+plotcanvas15 = FigureCanvasTkAgg(fig15, master=mframe4)
 plotcanvas15.draw()
 plotcanvas15.get_tk_widget().pack(fill="both", expand=True)
 
+mframe5 = create_mframe(scrollframe, pady_ext=0)
 fig16 = Figure(figsize=(16, 8))
 ax3 = fig16.add_subplot(111)
-plotcanvas16 = FigureCanvasTkAgg(fig16, master=mframe3)
+plotcanvas16 = FigureCanvasTkAgg(fig16, master=mframe5)
 plotcanvas16.draw()
 plotcanvas16.get_tk_widget().pack(fill="both", expand=True)
 
+mframe6 = create_mframe(scrollframe, pady_ext=0)
 fig28 = Figure(figsize=(8,8))
 ax5 = fig28.add_subplot(111)
-plotcanvas28 = FigureCanvasTkAgg(fig28, master=mframe3)
+fig28_state = {
+    "fig": fig28,
+    "ax": ax5,
+    "sc": None,
+    "x": None,
+    "y": None,
+    "z": None,
+    "v": None,
+    "label_size": None,
+    "slider_size": None,
+    "label_mask_y": None,
+    "slider_mask_y": None,
+    "label_mask_z": None,
+    "slider_mask_z": None,
+    "y_cutoff": 0,
+    "z_cutoff": 0
+}
+plotcanvas28 = FigureCanvasTkAgg(fig28, master=mframe6)
 plotcanvas28.draw()
 plotcanvas28.get_tk_widget().pack(fill="both", expand=True)
 
 # Default values
-row1.insert(0, "2")
-row2.insert(0, "0.3")
+row1.insert(0, "3")
+row2.insert(0, "2.1")
 row3.insert(0, "0.5")
 row4.insert(0, "2")
-row5.insert(0, "20")
-row6.insert(0, "3")
-row7.insert(0, "16")
+row5.insert(0, "30")
+row6.insert(0, "21")
+row7.insert(0, "32")
 entry8.insert(0, "[[-0.5, 0, 60], [0.5, 0, 60]]")
 row12.insert(0, "1")
 

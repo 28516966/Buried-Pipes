@@ -27,11 +27,22 @@ Young, O. and Trott, J. (1984). Buried Rigid Pipes. CRC Press.
 Build Instructions
 ====================================================================================================
 pyinstaller --onefile --noconsole --name "buried_pipes_traffic_pressure" buried_pipes.py
+
+====================================================================================================
+To Do
+====================================================================================================
+Link solve to callback updating sliders or else destroy them to force them to correct
+Make load input a named dict of loads, make global solutions a dict to store each result in
+Plot each series on the line graphs and add dropboxes with choice of which to use for plotting 3D
+Make results structured 2D plots | 3D plots
+Separate buttons for plot 2d and plot3d
+
 """
 
 # ==================================================================================================
 # Imports
 # ==================================================================================================
+import ast
 import csv
 import json
 import math
@@ -55,7 +66,6 @@ from tkinter import filedialog
 # Otherwise loads have been discretised into 10 point loads per wheel using contact pressure and
 # assuming a circular contact area
 # 10t = 200kN, 30t = 590kN
-global ref_loads
 ref_loads = {
     "L1_DMRBMainRoad1": [[-1.5, -0.9, 112.5], [-0.5, -0.9, 112.5], [0.5, -0.9, 112.5], 
                         [1.5, -0.9, 112.5], [-1.5, 0.9, 112.5], [-0.5, 0.9, 112.5], 
@@ -185,6 +195,7 @@ ref_loads = {
                      [0.455, 2.645, 12.5], [0.455, 2.355, 12.5], [0.6, 2.332, 12.5], 
                      [0.745, 2.355, 12.5]]
 }
+solutions = {}
 
 # ==================================================================================================
 # Class for Model Parameters and Methods
@@ -290,12 +301,11 @@ class PipePressures:
 
 def solve_gui():
     """Takes inputs from GUI and creates an instance of class 'PipePressures' to solve"""
-    global solution
+    global solutions
     try:
-        solution.clear()
+        solutions.clear()
     except:
         pass
-    solution = PipePressures()
     # Read spatial parameters and discretise mesh
     x = float(row1.get())
     y = float(row2.get())
@@ -304,13 +314,18 @@ def solve_gui():
     xdivs = int(row5.get())
     ydivs = int(row6.get())
     zdivs = int(row7.get())
-    solution.mesh(x, y, z, xdivs, ydivs, zdivs, zmin=zmin)
+    base_solution = PipePressures()
     # Read and set wheel loads
-    loads = json.loads(entry8.get())
-    solution.wheel_loads(loads)
-    # Solve
-    solution.boussinesq_pressure()
-    solution.design_pressure_Ps(float(row12.get()))
+    # loads = json.loads(entry8.get())
+    loadcases = ast.literal_eval(entry8.get())
+    for key, value in loadcases.items():
+        solution = PipePressures()
+        solution.mesh(x, y, z, xdivs, ydivs, zdivs, zmin=zmin)
+        solution.wheel_loads(key, value)
+        # Solve
+        solution.boussinesq_pressure()
+        solution.design_pressure_Ps(float(row12.get()))
+        solutions[key] = solution
     # Populate drop-box for plotting
     combobox14['values'] = [round(v, 3) for v in solution.z_arr.tolist()][::-1]
     combobox17['values'] = [round(v, 3) for v in solution.y_arr.tolist()][::-1]

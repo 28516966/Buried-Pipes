@@ -28,15 +28,6 @@ Build Instructions
 ====================================================================================================
 pyinstaller --onefile --noconsole --name "buried_pipes_traffic_pressure" buried_pipes.py
 
-====================================================================================================
-To Do
-====================================================================================================
-Link solve to callback updating sliders or else destroy them to force them to correct
-Make load input a named dict of loads, make global solutions a dict to store each result in
-Plot each series on the line graphs and add dropboxes with choice of which to use for plotting 3D
-Make results structured 2D plots | 3D plots
-Separate buttons for plot 2d and plot3d
-
 """
 
 # ==================================================================================================
@@ -66,6 +57,7 @@ from tkinter import filedialog
 # Otherwise loads have been discretised into 10 point loads per wheel using contact pressure and
 # assuming a circular contact area
 # 10t = 200kN, 30t = 590kN
+
 ref_loads = {
     "L1_DMRBMainRoad1": [[-1.5, -0.9, 112.5], [-0.5, -0.9, 112.5], [0.5, -0.9, 112.5], 
                         [1.5, -0.9, 112.5], [-1.5, 0.9, 112.5], [-0.5, 0.9, 112.5], 
@@ -206,6 +198,7 @@ class PipePressures:
         self.lib_load_points = {}
         self.results_pressures = []
         self.results_Ps = []
+
     def mesh(self, x, y, z, xdivs, ydivs, zdivs, zmin=0.5):
         """Defines parameters for spatial discretisation into a series of nodes for which to solve
         Boussinesq earth pressures at.
@@ -260,7 +253,6 @@ class PipePressures:
                         sigz += (3 * wheel[2] / (2 * math.pi * iz**2) * 
                                   (1 / (1 + (rad / iz)**2))**2.5)
                     self.results_pressures.append([iz, iy, ix, sigz])
-                    # print("z =", iz, "y =", iy, "x =", ix, "sigz =", sig_z)
         return
     
     def design_pressure_Ps(self, avg_len):
@@ -299,36 +291,78 @@ class PipePressures:
 # Functions Called By GUI to Produce & Manipulate Results
 # ==============================================================================
 
+def clear_plots():
+    """Clear results plots"""
+    global fig15, fig16, fig28, fig28_state
+    fig15.clf()
+    fig16.clf()
+    fig28.clf()
+
+    keys_to_clear = [
+        "label_size", 
+        "slider_size", 
+        "label_mask_y", 
+        "slider_mask_y", 
+        "label_mask_z", 
+        "slider_mask_z",
+    ]
+
+    for key in keys_to_clear:
+        if fig28_state[key] is not None:
+            fig28_state[key].destroy()
+
+    fig28_state = {
+        "fig": fig28,
+        "ax": ax5,
+        "sc": None,
+        "x": None,
+        "y": None,
+        "z": None,
+        "v": None,
+        "label_size": None,
+        "slider_size": None,
+        "label_mask_y": None,
+        "slider_mask_y": None,
+        "label_mask_z": None,
+        "slider_mask_z": None,
+        "y_cutoff": 0,
+        "z_cutoff": 0
+    }
+    return
+
 def solve_gui():
-    """Takes inputs from GUI and creates an instance of class 'PipePressures' to solve"""
+    """Takes inputs from GUI and creates an instance of class 'PipePressures' for each input 
+    load case to solve.
+    """
     global solutions
+    # Clear existing solutions and plots
     try:
         solutions.clear()
     except:
         pass
+    clear_plots()
     # Read spatial parameters and discretise mesh
     x = float(row1.get())
     y = float(row2.get())
-    z = float(row3.get())
-    zmin = float(row4.get())
+    zmin = float(row3.get())
+    z = float(row4.get())
     xdivs = int(row5.get())
     ydivs = int(row6.get())
     zdivs = int(row7.get())
-    base_solution = PipePressures()
     # Read and set wheel loads
-    # loads = json.loads(entry8.get())
     loadcases = ast.literal_eval(entry8.get())
     for key, value in loadcases.items():
         solution = PipePressures()
         solution.mesh(x, y, z, xdivs, ydivs, zdivs, zmin=zmin)
-        solution.wheel_loads(key, value)
+        solution.wheel_loads(value, load_name=key)
         # Solve
-        solution.boussinesq_pressure()
+        solution.boussinesq_pressure(load_name=key)
         solution.design_pressure_Ps(float(row12.get()))
         solutions[key] = solution
-    # Populate drop-box for plotting
-    combobox14['values'] = [round(v, 3) for v in solution.z_arr.tolist()][::-1]
-    combobox17['values'] = [round(v, 3) for v in solution.y_arr.tolist()][::-1]
+    # Populate drop-boxes for plotting
+    combobox14['values'] = [round(v, 3) for v in solution.z_arr.tolist()]
+    combobox17['values'] = [round(v, 3) for v in solution.y_arr.tolist()]
+    combobox30['values'] = list(solutions.keys())
     return
 
 def solve_Ps(loads):
@@ -353,7 +387,13 @@ def solve_Ps(loads):
 
 def save_pressures():
     """Enables saving of comma-delimited results to .txt or .csv file"""
-    global solution
+    global solutions
+    write_res = []
+    for key, value in solutions.items():
+        # reverse_results = value.results_pressures[]
+        for row in value.results_pressures:
+            line = [key] + row
+            write_res.append(line)
     file_path = filedialog.asksaveasfilename(
         defaultextension=".csv",
         filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
@@ -363,14 +403,19 @@ def save_pressures():
         return
     with open(file_path, mode='w', newline='') as csv_file:
         writer = csv.writer(csv_file)
-        writer.writerow(["Z [m]", "Y [m]", "X [m]", "SIGMA_Z [kPa]"])
-        for row in solution.results_pressures:
+        writer.writerow(["Load Name", "Z [m]", "Y [m]", "X [m]", "SIGMA_Z [kPa]"])
+        for row in write_res:
             writer.writerow(row)
     return
 
 def save_traffic_surcharge():
     """Enables saving of comma-delimited results to .txt or .csv file"""
-    global solution
+    global solutions
+    write_res = []
+    for key, value in solutions.items():
+        for row in value.results_Ps:
+            line = [key] + row
+            write_res.append(line)
     file_path = filedialog.asksaveasfilename(
         defaultextension=".csv",
         filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
@@ -380,32 +425,28 @@ def save_traffic_surcharge():
         return
     with open(file_path, mode='w', newline='') as csv_file:
         writer = csv.writer(csv_file)
-        writer.writerow(["Z [m]", "Ps [kPa]"])
-        for row in solution.results_Ps:
+        writer.writerow(["Load Name", "Z [m]", "Ps [kPa]"])
+        for row in write_res:
             writer.writerow(row)
     return
 
-def plot_results(y, z):
-    """Plots results of design traffic surcharge Ps and boussinesq pressures
-
-    Args:
-        y (float): y coordinate for X-Z slice
-        z (float): Z coordinate for X-Y slice
-    """
+def plot_results_2D():
+    """Plots results of design traffic surcharge Ps"""
     # Extract results from GUI inputs
-    global solution
-    np_results_Ps = np.asarray(solution.results_Ps)
-    np_res_p = np.asarray(solution.results_pressures)
+    global solutions
+    plot_vals = {}
+    for key, value in solutions.items():
+        plot_vals[key] = (np.asarray(value.results_Ps)[:, 0], np.asarray(value.results_Ps)[:, 1])
 
     # Set up fig15
-    val_z = np_results_Ps[:, 0]
-    val_Ps = np_results_Ps[:, 1]
     global fig15
     fig15.clear()
     ax1 = fig15.add_subplot(1, 2, 1)
     ax2 = fig15.add_subplot(1, 2, 2)
-    ax1.plot(val_Ps, val_z, linewidth=1, linestyle="-", marker="o", 
-             label="User input")
+    for key, value in plot_vals.items():
+        ax1.plot(value[1], value[0], linewidth=1, linestyle="-", marker="o", label=key)
+        ax2.plot(value[0], value[1], linewidth=1, linestyle="-", marker="o", label=key)
+
     ax1.set_title("Design Surcharge Pressure Ps with Depth")
     ax1.set_xlabel("Surcharge Pressure [kPa], Ps")
     ax1.set_ylabel("Cover Depth [m], H")
@@ -419,7 +460,6 @@ def plot_results(y, z):
             linestyle=':',
             linewidth=0.5,
             color='lightgray')
-    ax2.plot(val_z, val_Ps, linewidth=1, linestyle="-", marker="o", label="User input")
     ax2.set_title("Design Surcharge Pressure Ps with Depth")
     ax2.set_xscale("log")
     ax2.set_yscale("log")
@@ -498,6 +538,19 @@ def plot_results(y, z):
                fontsize="small", ncol=2)
     fig15.subplots_adjust(wspace=0.2, bottom=0.25)
     plotcanvas15.draw()
+
+    return
+
+def plot_results_3D(y, z, load_name="userinput"):
+    """Plots results of Boussinesq pressures
+
+    Args:
+        y (float): y coordinate for X-Z slice
+        z (float): Z coordinate for X-Y slice
+    """
+    global solutions
+    solution = solutions[load_name]
+    np_res_p = np.asarray(solution.results_pressures)
 
     # Set up fig16
     # Variables for ax3
@@ -1084,7 +1137,7 @@ frame16.columnconfigure(0, weight=1)
 
 frame8 = tk.Frame(mframe2)
 frame8.pack(fill="x", pady=2)
-tk.Label(frame8, text="Set of point loads as [[x1, y1, P1], [x2, y2, P2], ...]",
+tk.Label(frame8, text='Set of point loads as {"Load Name": [[x1, y1, P1], [x2, y2, P2], ...]}',
          anchor="w", justify="left").grid(row=0, column=0, sticky="w", padx=(0,5))
 entry8 = tk.Entry(frame8)
 entry8.grid(row=0, column=1, sticky="ew")
@@ -1113,8 +1166,7 @@ row12 = create_row(mframe3,
 
 frame9 = tk.Frame(mframe3)
 frame9.pack(fill="x", pady=2)
-button9 = tk.Button(frame9, text="Solve for Pressures & Traffic Surcharge", 
-                    command=solve_gui)
+button9 = tk.Button(frame9, text="Solve for Pressures & Traffic Surcharge", command=solve_gui)
 button9.grid(row=0, column=0, sticky="ew")
 frame9.rowconfigure(0, weight=1)
 frame9.columnconfigure(0, weight=1)
@@ -1133,6 +1185,51 @@ button13 = tk.Button(frame13, text="Save Traffic Surcharge Ps to File",
 button13.grid(row=0, column=0, sticky="ew")
 frame13.rowconfigure(0, weight=1)
 frame13.columnconfigure(0, weight=1)
+
+tk.Label(mframe3, 
+         text="2D Plot Settings",
+         font=("Arial", 10, "bold"), 
+         anchor="w", 
+         justify="left"
+    ).pack(fill="x", padx=0, pady=(10,0))
+
+frame18 = tk.Frame(mframe3)
+frame18.pack(fill="x", pady=(0, 2))
+label18 = tk.Label(frame18, text="In addition to user wheel loads, also plot:", anchor="w",
+                   justify="left")
+label18.pack(fill="x", pady=2)
+
+row19, var19 = create_row_check(mframe3, "DMRB Main Road Loading")
+row20, var20 = create_row_check(mframe3, "DMRB Filter Drain Loading")
+row21, var21 = create_row_check(mframe3, "DMRB Field Loading")
+row22, var22 = create_row_check(mframe3, "BS 9295 10t static wheel, dynamic factor 2.0, 300kPa " \
+"contact pressure")
+row23, var23 = create_row_check(mframe3, "BS 9295 10t static wheel, dynamic factor 2.0, 700kPa " \
+"contact pressure")
+row24, var24 = create_row_check(mframe3, "BS 9295 30t static wheel, dynamic factor 2.0, 300kPa " \
+"contact pressure")
+row25, var25 = create_row_check(mframe3, "BS 9295 30t static wheel, dynamic factor 2.0, 700kPa " \
+"contact pressure")
+row26, var26 = create_row_check(mframe3, "Eurocode Load Model 1")
+row27, var27 = create_row_check(mframe3, "Eurocode Load Model 2")
+
+tk.Label(mframe3, 
+         text="3D Plot Settings",
+         font=("Arial", 10, "bold"), 
+         anchor="w", 
+         justify="left"
+    ).pack(fill="x", padx=0, pady=(10,0))
+
+frame30 = tk.Frame(mframe3)
+frame30.pack(fill="x", pady=2)
+label30 = tk.Label(frame30, text="Plot pressures from load case", anchor="w", 
+                   justify="left", width=35)
+label30.grid(row=0, column=0, sticky="w")
+combobox30 = ttk.Combobox(frame30)
+combobox30.grid(row=0, column=1, sticky="e")
+tk.Label(frame30, text="m", anchor="w").grid(row=0, column=2, sticky="w", padx=(5,0))
+frame30.grid_columnconfigure(0, weight=1)
+frame30.grid_columnconfigure(1, weight=0)
 
 frame14 = tk.Frame(mframe3)
 frame14.pack(fill="x", pady=2)
@@ -1156,41 +1253,31 @@ tk.Label(frame17, text="m", anchor="w").grid(row=0, column=2, sticky="w", padx=(
 frame17.grid_columnconfigure(0, weight=1)
 frame17.grid_columnconfigure(1, weight=0)
 
-frame18 = tk.Frame(mframe3)
-frame18.pack(fill="x", pady=(10, 2))
-label18 = tk.Label(frame18, text="In addition to user wheel loads, also plot:", anchor="w",
-                   justify="left")
-label18.pack(fill="x", pady=2)
-
-row19, var19 = create_row_check(mframe3, "DMRB Main Road Loading")
-row20, var20 = create_row_check(mframe3, "DMRB Filter Drain Loading")
-row21, var21 = create_row_check(mframe3, "DMRB Field Loading")
-row22, var22 = create_row_check(mframe3, "BS 9295 10t static wheel, dynamic factor 2.0, 300kPa " \
-"contact pressure")
-row23, var23 = create_row_check(mframe3, "BS 9295 10t static wheel, dynamic factor 2.0, 700kPa " \
-"contact pressure")
-row24, var24 = create_row_check(mframe3, "BS 9295 30t static wheel, dynamic factor 2.0, 300kPa " \
-"contact pressure")
-row25, var25 = create_row_check(mframe3, "BS 9295 30t static wheel, dynamic factor 2.0, 700kPa " \
-"contact pressure")
-row26, var26 = create_row_check(mframe3, "Eurocode Load Model 1")
-row27, var27 = create_row_check(mframe3, "Eurocode Load Model 2")
-
-def on_plot():
+def on_plot_3D():
     """Obtains inputs from GUI and calls plot_results() for 3D plots"""
     y_value = combobox17.get()
     z_value = combobox14.get()
+    load_name = combobox30.get()
     if not (y_value and z_value):
         return
-    plot_results(float(y_value), float(z_value))
+    if not (load_name):
+        load_name = "userinput"
+    plot_results_3D(float(y_value), float(z_value), load_name=load_name)
     return
 
 frame15 = tk.Frame(mframe3)
 frame15.pack(fill="x", pady=2)
-button15 = tk.Button(frame15, text="Generate Results Plots", command=on_plot)
+button15 = tk.Button(frame15, text="Generate 2D Results Plots", command=plot_results_2D)
 button15.grid(row=0, column=0, sticky="ew")
 frame15.rowconfigure(0, weight=1)
 frame15.columnconfigure(0, weight=1)
+
+frame29 = tk.Frame(mframe3)
+frame29.pack(fill="x", pady=2)
+button29 = tk.Button(frame29, text="Generate 3D Results Plots", command=on_plot_3D)
+button29.grid(row=0, column=0, sticky="ew")
+frame29.rowconfigure(0, weight=1)
+frame29.columnconfigure(0, weight=1)
 
 mframe4 = create_mframe(scrollframe, pady_ext=0)
 fig15 = Figure(figsize=(8, 12))
@@ -1238,7 +1325,7 @@ row4.insert(0, "2")
 row5.insert(0, "30")
 row6.insert(0, "21")
 row7.insert(0, "32")
-entry8.insert(0, "[[-0.5, 0, 60], [0.5, 0, 60]]")
+entry8.insert(0, '{"Field 1": [[-0.5, 0, 60], [0.5, 0, 60]], "Filter 1": [[-0.5, 0, 87.5], [0.5, 0, 87.5]]}')
 row12.insert(0, "1")
 
 # Create root window

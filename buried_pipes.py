@@ -36,7 +36,6 @@ pyinstaller --onefile --noconsole --name "buried_pipes_traffic_pressure" buried_
 import ast
 import csv
 import json
-import math
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.colors import LogNorm
 from matplotlib.cm import ScalarMappable
@@ -250,7 +249,7 @@ class PipePressures:
                     sigz = 0
                     for wheel in self.lib_load_points[load_name]:
                         rad = ((ix - wheel[0])**2 + (iy - wheel[1])**2) ** 0.5
-                        sigz += (3 * wheel[2] / (2 * math.pi * iz**2) * 
+                        sigz += (3 * wheel[2] / (2 * np.pi * iz**2) * 
                                   (1 / (1 + (rad / iz)**2))**2.5)
                     self.results_pressures.append([iz, iy, ix, sigz])
         return
@@ -293,10 +292,13 @@ class PipePressures:
 
 def clear_plots():
     """Clear results plots"""
-    global fig15, fig16, fig28, fig28_state
+    global fig15, fig16, fig28, fig28_state, plotcanvas15, plotcanvas16, plotcanvas28
     fig15.clf()
     fig16.clf()
     fig28.clf()
+    plotcanvas15.draw()
+    plotcanvas16.draw()
+    plotcanvas28.draw()
 
     keys_to_clear = [
         "label_size", 
@@ -757,7 +759,7 @@ def plot_results_3D(y, z, load_name="userinput"):
     return
 
 
-def discretise_wheel(load, pressure, x=0, y=0, n=10, r1r2=0.5):
+def discretise_wheel(load, pressure, x=0, y=0, n=10):
     """Converts a point wheel load and contact pressure into a patch load over a circular area, then
     discretises this into a set of n point loads (eitheer 4 quadrants, and 6 annular sectors or just
     4 quadrants)
@@ -767,35 +769,57 @@ def discretise_wheel(load, pressure, x=0, y=0, n=10, r1r2=0.5):
         pressure (float): Contact pressure [kPa]
         x (float, optional): Position of centre of wheel [m]. Defaults to 0.
         y (float, optional): Position of centre of wheel [m]. Defaults to 0.
-        r1r2 (float, optional): Ratio of inner quadrant radius to total radius. Defaults to 0.5.
 
     Returns:
         list of lists in format [x, y, P]
     """
     area = load / pressure
-    r2 = (area / math.pi) ** 0.5
-    if n == 4:
-        a_quad = 0.25 * math.pi * r2**2
-        y_quad = 4 * r2 / (3 * math.pi)
+    r2 = (area / np.pi) ** 0.5
+    
+    if n == 0: # Custom
+        global custom_wheel_mesh
+        r1 = custom_wheel_mesh[0][0] * r2
+        a_quad = 0.25 * np.pi * r1**2
+        y_quad = 4 * r1 / (3 * np.pi)
         p_quad = a_quad / area * load
         result = [[x + y_quad, y + y_quad, p_quad], [x - y_quad, y + y_quad, p_quad],
                   [x - y_quad, y - y_quad, p_quad], [x + y_quad, y - y_quad, p_quad]]
-    else:
-        r1 = r1r2 * r2
-        a_quad = 0.25 * math.pi * r1**2
-        y_quad = 4 * r1 / (3 * math.pi)
+        ro = r1
+        for ring in custom_wheel_mesh[1:]:
+            ri = ro
+            ro = ri + r2*ring[0]
+            alpha0 = 2 * np.pi / ring[1]
+            alpha = 0
+            a_sect = alpha0 * (ro**2 - ri**2)
+            p_sect = a_sect / area * load
+            r_sect = 2 * np.sin(alpha0) * (ro**3 - ri**3) / (3 * alpha0 * (ro**2 - ri**2))
+            for i in range(0, ring[1]):
+                x_sect = r_sect * np.cos(alpha)
+                y_sect = r_sect * np.sin(alpha)
+                result.append([x + x_sect, y + y_sect, p_sect])
+                alpha += alpha0
+    elif n == 4: # 4 quadrants
+        a_quad = 0.25 * np.pi * r2**2
+        y_quad = 4 * r2 / (3 * np.pi)
         p_quad = a_quad / area * load
-        alpha = 2 * math.pi / 12
+        result = [[x + y_quad, y + y_quad, p_quad], [x - y_quad, y + y_quad, p_quad],
+                  [x - y_quad, y - y_quad, p_quad], [x + y_quad, y - y_quad, p_quad]]
+    else: # fallback to 10
+        r1 = 0.5 * r2
+        a_quad = 0.25 * np.pi * r1**2
+        y_quad = 4 * r1 / (3 * np.pi)
+        p_quad = a_quad / area * load
+        alpha = 2 * np.pi / 12
         a_sect = alpha * (r2**2 - r1**2)
-        y_sect = 2 * math.sin(alpha) * (r2**3 - r1**3) / (3 * alpha * (r2**2 - r1**2))
-        x1_sect = y_sect * math.cos(alpha)
-        y1_sect = y_sect * math.cos(alpha)
+        r_sect = 2 * np.sin(alpha) * (r2**3 - r1**3) / (3 * alpha * (r2**2 - r1**2))
+        x1_sect = r_sect * np.cos(alpha)
+        y1_sect = r_sect * np.sin(alpha)
         p_sect = a_sect / area * load
         result = [[x + y_quad, y + y_quad, p_quad], [x - y_quad, y + y_quad, p_quad], 
                 [x - y_quad, y - y_quad, p_quad], [x + y_quad, y - y_quad, p_quad], 
-                [x + x1_sect, y + y1_sect, p_sect], [x, y + y_sect, p_sect],
+                [x + x1_sect, y + y1_sect, p_sect], [x, y + r_sect, p_sect],
                 [x - x1_sect, y + y1_sect, p_sect], [x - x1_sect, y - y1_sect, p_sect],
-                [x, y - y_sect, p_sect], [x + x1_sect, y - y1_sect, p_sect]]
+                [x, y - r_sect, p_sect], [x + x1_sect, y - y1_sect, p_sect]]
     rounded = [[round(value, 3) for value in row] for row in result]
     return rounded
 
@@ -805,13 +829,12 @@ def convert_patch_loads(widget, wheel_loads, contact_pressure, n):
 
     Args:
         widget: text widget to edit with output
-        wheel_loads: list of lists, see discretise_wheel() for more information
-        contact_pressure (kPa): contact pressure for determination of patch load
+        wheel_loads (list): list of lists, see discretise_wheel() for more information
+        contact_pressure (float): contact pressure for determination of patch load [kPa]
     """
     output = []
     for wheel in wheel_loads:
-        output.extend(discretise_wheel(wheel[2], contact_pressure, x=wheel[0], 
-                                       y=wheel[1], n=n))
+        output.extend(discretise_wheel(wheel[2], contact_pressure, x=wheel[0], y=wheel[1], n=n))
     widget.delete("1.0", "end")
     widget.insert("1.0", str(output))
     return
@@ -889,34 +912,55 @@ def show_load_dialog():
     tk.Label(p_frame2, text="Wheel loading to discretise:").pack(side="left")
     p_entry2 = tk.Entry(p_frame2)
     p_entry2.pack(side="right", fill="x", expand=True, padx=5)
+    p_entry2.insert(0, "[[-0.5, 0, 60], [0.5, 0, 60]]")
     
     p_frame3 = tk.Frame(popup)
     p_frame3.pack(fill="x", padx=10, pady=(5,10))
     tk.Label(p_frame3, text="Contact pressure for wheels [kPa]").pack(side="left")
     p_entry3 = tk.Entry(p_frame3, width=15)
     p_entry3.pack(side="right", padx=5)
+    p_entry3.insert(0, "400")
 
     p_frame6 = tk.Frame(popup)
-    p_frame6.pack(fill="x", padx=10, pady=(5,10))
+    p_frame6.pack(fill="x", padx=10, pady=(5,5))
     p_frame6a = tk.Frame(p_frame6)
     p_frame6a.pack(side="left", fill="x")
     p_frame6b = tk.Frame(p_frame6, width=15)
     p_frame6b.pack(side="right", fill="x")
-    tk.Label(p_frame6a, text="Number of points to discretise to\neither 4 total = 4 quadrants\n" \
-    "or 10 total = 4 inner quadrants + 6 outer annular sectors", justify="left").pack(side="left")
+    tk.Label(
+        p_frame6a, 
+        text="Number of points to discretise to \n" \
+        "4 total = 4 quadrants\n" \
+        "10 total = 4 inner quadrants + 6 outer annular sectors\n" \
+        "Custom = user-set number and weighting of radial divisions and angular divisions",
+        justify="left").pack(side="left")
     n = tk.IntVar()
+    n.set(10)
     p_rbutton6a = ttk.Radiobutton(p_frame6b, text="4", variable=n, value=4)
-    p_rbutton6a.pack(side="left", fill="x")
+    p_rbutton6a.pack(fill="x")
     p_rbutton6b = ttk.Radiobutton(p_frame6b, text="10", variable=n, value=10)
-    p_rbutton6b.pack(side="right", fill="x")
-    # p_entry6 = tk.Entry(p_frame6, width=15)
-    # p_entry6.pack(side="right", padx=5)
+    p_rbutton6b.pack(fill="x")
+    p_rbutton6c = ttk.Radiobutton(p_frame6b, text="Custom", variable=n, value=0)
+    p_rbutton6c.pack(fill="x")
+
+    p_frame7 = tk.Frame(popup)
+    p_frame7.pack(fill="x", padx=10, pady=(0,10))
+    tk.Label(
+        p_frame7, 
+        text="[[inner ring radial weighting, angular subdivisions], ... \n" \
+        "[outer ring radial weighting, angular subdivisions]]",
+        justify="left").pack(side="left")
+    p_entry7 = tk.Entry(p_frame7)
+    p_entry7.pack(side="right", fill="x", expand=True, padx=5)
+    p_entry7.insert(0, "[[0.4, 4], [0.3, 6], [0.3, 8]]")
+    global custom_wheel_mesh
+    custom_wheel_mesh = ast.literal_eval(p_entry7.get())
 
     p_frame4 = tk.Frame(popup)
     p_frame4.pack(fill="x", pady=2)
     p_button4 = tk.Button(p_frame4, text="Discretize wheel patch loading into set of n point " \
     "loads (assuming circular contact patch)", command=lambda: convert_patch_loads(
-        p_text5, json.loads(p_entry2.get()), float(p_entry3.get()), n=n.get()))
+        p_text5, ast.literal_eval(p_entry2.get()), float(p_entry3.get()), n=n.get()))
     p_button4.grid(row=0, column=0, sticky="ew")
     p_frame4.rowconfigure(0, weight=1)
     p_frame4.columnconfigure(0, weight=1)

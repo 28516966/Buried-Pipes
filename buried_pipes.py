@@ -36,18 +36,16 @@ pyinstaller --onefile --noconsole --name "buried_pipes_traffic_pressure" buried_
 import ast
 import csv
 import json
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.colors import LogNorm
 from matplotlib.cm import ScalarMappable
 from matplotlib.figure import Figure
-from matplotlib.ticker import FixedLocator, FormatStrFormatter, NullFormatter
+import matplotlib.pyplot as plt
+from matplotlib.ticker import FixedLocator, FormatStrFormatter, MultipleLocator, NullFormatter
 import numpy as np
 import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog
-# import matplotlib.pyplot as plt
-# from mpl_toolkits.mplot3d import Axes3D
-# from matplotlib.widgets import Slider
 
 # ==================================================================================================
 # Hard Coded Reference Loads
@@ -534,6 +532,7 @@ def plot_results_2D():
     if var27.get() is True:
         ref_plot(ax1, "Eurocode_LM2", "Eurocode LM2")
         ref_plot(ax2, "Eurocode_LM2", "Eurocode LM2", cover_on_y=False)
+
     ax1.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), bbox_transform=ax1.transAxes, 
                fontsize="small", ncol=2)
     ax2.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), bbox_transform=ax2.transAxes, 
@@ -660,8 +659,6 @@ def plot_results_3D(y, z, load_name="userinput"):
     ax5.set_ylabel("y [m]")
     ax5.set_zlabel("Cover Depth [m], H")
     ax5.invert_zaxis()
-    # cbar = fig28.colorbar(sc, ax=ax5)
-    # cbar.set_label("Boussinesq Pressure [kPa]")
     cbar_ax = fig28.add_axes([0.88, 0.2, 0.03, 0.6])
     sm = ScalarMappable(norm=norm, cmap='jet')
     sm.set_array([])
@@ -759,7 +756,7 @@ def plot_results_3D(y, z, load_name="userinput"):
     return
 
 
-def discretise_wheel(load, pressure, x=0, y=0, n=10):
+def discretise_wheel(load, pressure, x=0, y=0, n=10, custom_wheel_mesh=None):
     """Converts a point wheel load and contact pressure into a patch load over a circular area, then
     discretises this into a set of n point loads (eitheer 4 quadrants, and 6 annular sectors or just
     4 quadrants)
@@ -777,19 +774,26 @@ def discretise_wheel(load, pressure, x=0, y=0, n=10):
     r2 = (area / np.pi) ** 0.5
     
     if n == 0: # Custom
-        global custom_wheel_mesh
         r1 = custom_wheel_mesh[0][0] * r2
-        a_quad = 0.25 * np.pi * r1**2
-        y_quad = 4 * r1 / (3 * np.pi)
-        p_quad = a_quad / area * load
-        result = [[x + y_quad, y + y_quad, p_quad], [x - y_quad, y + y_quad, p_quad],
-                  [x - y_quad, y - y_quad, p_quad], [x + y_quad, y - y_quad, p_quad]]
+        alpha0 = 2 * np.pi / custom_wheel_mesh[0][1]
+        phase = custom_wheel_mesh[0][2]
+        alpha = phase * alpha0
+        result = []
+        a_sect = alpha0 * r1**2
+        p_sect = a_sect / area * load
+        r_sect = 2 * r1 * np.sin(alpha0) / (3 * alpha0)
+        for i in range(0, custom_wheel_mesh[0][1]):
+            x_sect = r_sect * np.cos(alpha)
+            y_sect = r_sect * np.sin(alpha)
+            result.append([x + x_sect, y + y_sect, p_sect])
+            alpha += alpha0
         ro = r1
         for ring in custom_wheel_mesh[1:]:
             ri = ro
             ro = ri + r2*ring[0]
             alpha0 = 2 * np.pi / ring[1]
-            alpha = 0
+            phase = ring[2]
+            alpha = phase * alpha0
             a_sect = alpha0 * (ro**2 - ri**2)
             p_sect = a_sect / area * load
             r_sect = 2 * np.sin(alpha0) * (ro**3 - ri**3) / (3 * alpha0 * (ro**2 - ri**2))
@@ -823,7 +827,7 @@ def discretise_wheel(load, pressure, x=0, y=0, n=10):
     rounded = [[round(value, 3) for value in row] for row in result]
     return rounded
 
-def convert_patch_loads(widget, wheel_loads, contact_pressure, n):
+def convert_patch_loads(widget, wheel_loads, contact_pressure, n=10, custom_wheel_mesh=None):
     """Runs input wheel loads through discretise_wheel() function and adds results to GUI window
     for user to copy
 
@@ -834,25 +838,55 @@ def convert_patch_loads(widget, wheel_loads, contact_pressure, n):
     """
     output = []
     for wheel in wheel_loads:
-        output.extend(discretise_wheel(wheel[2], contact_pressure, x=wheel[0], y=wheel[1], n=n))
+        output.extend(discretise_wheel(
+            wheel[2], 
+            contact_pressure, 
+            x=wheel[0], 
+            y=wheel[1], 
+            n=n,
+            custom_wheel_mesh=custom_wheel_mesh
+        ))
     widget.delete("1.0", "end")
     widget.insert("1.0", str(output))
-    return
+    return np.array(output)
 
 def show_load_dialog():
     """Create popup window enabling further discretisation of wheel loads and giving information
     on different traffic loading
     """
     popup = tk.Toplevel()
+    popup.geometry("640x720")
     popup.title("Wheel Load Calculator")
     
     # Make the window modal - comment out to enable clicking back to root window
     # popup.grab_set()
     
+    # Make scrollable canvas
+    canvas = tk.Canvas(popup)
+    scrollbar = ttk.Scrollbar(popup, orient="vertical", command=canvas.yview)
+    canvas.configure(yscrollcommand=scrollbar.set)
+
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
+
+    scrollable_frame = tk.Frame(canvas)
+    window_id = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+
+    def on_canvas_configure(event):
+        canvas.itemconfig(window_id, width=event.width)
+    canvas.bind("<Configure>", on_canvas_configure)
+
+    def on_frame_configure(event):
+        canvas.configure(scrollregion=canvas.bbox("all"))
+    scrollable_frame.bind("<Configure>", on_frame_configure)
+
+
     # Text widget (read-only)
-    p_frame1 = tk.Frame(popup)
+    p_mframe1 = tk.Frame(scrollable_frame)
+    p_mframe1.pack(fill="both", expand=True)
+    p_frame1 = tk.Frame(p_mframe1)
     p_frame1.pack(fill="both", expand=True, padx=10, pady=(10,5))
-    p_text1 = tk.Text(p_frame1, wrap="word", width=60, height=10)
+    p_text1 = tk.Text(p_frame1, wrap="word", width=60, height=20)
     p_text1.tag_configure("bold", font=("Arial", 10, "bold"))
     p_text1.tag_configure("normal", font=("Arial", 10))
     p_text1.insert("1.0", "DMRB CD 533 Loading\n", "bold")
@@ -899,7 +933,7 @@ def show_load_dialog():
     "dynamic wheel load of 60kN, contact pressure 400kPa:\n" \
     "[[-0.45, 0, 60], [0.45, 0, 60]]\n\n", "normal")
     p_text1.config(state="disabled")  # make read-only but still selectable
-    p_text1.pack(padx=10, pady=10, side="left", fill="both", expand=True)
+    p_text1.pack(padx=0, pady=10, side="left", fill="both", expand=True)
     
     # Add a scrollbar
     p_scrollbar1 = ttk.Scrollbar(p_frame1, orient="vertical", command=p_text1.yview)
@@ -907,22 +941,22 @@ def show_load_dialog():
     p_scrollbar1.pack(side="right", fill="y")
     
     # Add inputs
-    p_frame2 = tk.Frame(popup)
-    p_frame2.pack(fill="x", padx=10, pady=(5,10))
+    p_frame2 = tk.Frame(p_mframe1)
+    p_frame2.pack(fill="x", expand=True, padx=10, pady=(5,10))
     tk.Label(p_frame2, text="Wheel loading to discretise:").pack(side="left")
     p_entry2 = tk.Entry(p_frame2)
     p_entry2.pack(side="right", fill="x", expand=True, padx=5)
     p_entry2.insert(0, "[[-0.5, 0, 60], [0.5, 0, 60]]")
     
-    p_frame3 = tk.Frame(popup)
-    p_frame3.pack(fill="x", padx=10, pady=(5,10))
+    p_frame3 = tk.Frame(p_mframe1)
+    p_frame3.pack(fill="x", expand=True, padx=10, pady=(5,10))
     tk.Label(p_frame3, text="Contact pressure for wheels [kPa]").pack(side="left")
     p_entry3 = tk.Entry(p_frame3, width=15)
     p_entry3.pack(side="right", padx=5)
     p_entry3.insert(0, "400")
 
-    p_frame6 = tk.Frame(popup)
-    p_frame6.pack(fill="x", padx=10, pady=(5,5))
+    p_frame6 = tk.Frame(p_mframe1)
+    p_frame6.pack(fill="x", expand=True, padx=10, pady=(5,5))
     p_frame6a = tk.Frame(p_frame6)
     p_frame6a.pack(side="left", fill="x")
     p_frame6b = tk.Frame(p_frame6, width=15)
@@ -943,39 +977,101 @@ def show_load_dialog():
     p_rbutton6c = ttk.Radiobutton(p_frame6b, text="Custom", variable=n, value=0)
     p_rbutton6c.pack(fill="x")
 
-    p_frame7 = tk.Frame(popup)
-    p_frame7.pack(fill="x", padx=10, pady=(0,10))
+    p_frame7 = tk.Frame(p_mframe1)
+    p_frame7.pack(fill="x", expand=True, padx=10, pady=(0,10))
     tk.Label(
         p_frame7, 
-        text="[[inner ring radial weighting, angular subdivisions], ... \n" \
-        "[outer ring radial weighting, angular subdivisions]]",
+        text="[[inner ring radial weighting, angular subdivisions, phase], ... \n" \
+        "[outer ring radial weighting, angular subdivisions, phase]]",
         justify="left").pack(side="left")
     p_entry7 = tk.Entry(p_frame7)
     p_entry7.pack(side="right", fill="x", expand=True, padx=5)
-    p_entry7.insert(0, "[[0.4, 4], [0.3, 6], [0.3, 8]]")
-    global custom_wheel_mesh
-    custom_wheel_mesh = ast.literal_eval(p_entry7.get())
+    p_entry7.insert(0, "[[0.4, 4, 0.5], [0.3, 6, 0.5], [0.3, 8, 0]]")
 
-    p_frame4 = tk.Frame(popup)
-    p_frame4.pack(fill="x", pady=2)
+    p_frame4 = tk.Frame(p_mframe1)
+    p_frame4.pack(fill="x", expand=True, pady=2)
     p_button4 = tk.Button(p_frame4, text="Discretize wheel patch loading into set of n point " \
     "loads (assuming circular contact patch)", command=lambda: convert_patch_loads(
-        p_text5, ast.literal_eval(p_entry2.get()), float(p_entry3.get()), n=n.get()))
+        p_text5, 
+        ast.literal_eval(p_entry2.get()), 
+        float(p_entry3.get()), 
+        n=n.get(),
+        custom_wheel_mesh=ast.literal_eval(p_entry7.get())
+    ))
     p_button4.grid(row=0, column=0, sticky="ew")
     p_frame4.rowconfigure(0, weight=1)
     p_frame4.columnconfigure(0, weight=1)
 
-    p_frame5 = tk.Frame(popup)
-    p_frame5.pack(fill="both", expand=True, padx=10, pady=(10,5))
-    p_text5 = tk.Text(p_frame5, wrap="word", width=60, height=10)
+    def plot_wheel_loads():
+        """Plot wheel loads in popup"""
+        nonlocal fig, plot_canvas, plot_frame 
+        plt.close(fig)
+        plot_canvas.get_tk_widget().destroy()
+        plot_frame.destroy()
+        res = convert_patch_loads(
+            p_text5, 
+            ast.literal_eval(p_entry2.get()), 
+            float(p_entry3.get()), 
+            n=n.get(),
+            custom_wheel_mesh=ast.literal_eval(p_entry7.get())
+        )
+        x = res[:, 0]
+        y = res[:, 1]
+        plot_frame = tk.Frame(scrollable_frame)
+        plot_frame.pack(fill="both", expand=True)
+        fig = Figure(figsize=(16,8))
+        ax = fig.add_subplot(111)
+        ax.plot(x, y, 'o', linestyle='') 
+        ax.set_xlabel("x [m]")
+        ax.set_ylabel("y [m]")
+
+        margin = 0.5  # extra space around data
+        xmin, xmax = x.min() - margin, x.max() + margin
+        ymin, ymax = y.min() - margin, y.max() + margin
+        ax.set_xlim(xmin, xmax)
+        ax.set_ylim(ymin, ymax)
+        ax.set_aspect('equal', adjustable='box')
+        ax.xaxis.set_major_locator(MultipleLocator(0.5))
+        ax.yaxis.set_major_locator(MultipleLocator(0.5))
+        ax.xaxis.set_minor_locator(MultipleLocator(0.1))
+        ax.yaxis.set_minor_locator(MultipleLocator(0.1))
+        ax.grid(which='major', color='grey', linestyle='-', linewidth=0.8)
+        ax.grid(which='minor', color='lightgrey', linestyle='--', linewidth=0.5)
+
+        plot_canvas = FigureCanvasTkAgg(fig, master=plot_frame)
+        plot_canvas.draw()
+        plot_canvas.get_tk_widget().pack(fill="both", expand=True)
+        scrollable_frame.update_idletasks()
+        canvas.configure(scrollregion=canvas.bbox("all"))
+        toolbar = NavigationToolbar2Tk(plot_canvas, plot_frame)
+        toolbar.update()
+        toolbar.pack(side="top", fill="x")
+        canvas.yview_moveto(1.0)
+        return
+
+    p_frame8 = tk.Frame(p_mframe1)
+    p_frame8.pack(fill="x", expand=True, pady=2)
+    p_button8 = tk.Button(p_frame8, text="Plot wheel loads", command=lambda: plot_wheel_loads())
+    p_button8.grid(row=0, column=0, sticky="ew")
+    p_frame8.rowconfigure(0, weight=1)
+    p_frame8.columnconfigure(0, weight=1)
+
+    plot_frame = tk.Frame(scrollable_frame)
+    plot_frame.pack(fill="both", expand=True)
+    fig = Figure(figsize=(16,8))
+    plot_canvas = FigureCanvasTkAgg(fig, master=plot_frame)
+    plot_canvas.draw()
+    plot_canvas.get_tk_widget().pack(fill="both", expand=True)
+    scrollable_frame.update_idletasks()
+    canvas.configure(scrollregion=canvas.bbox("all"))
+    
+    p_frame5 = tk.Frame(p_mframe1)
+    p_frame5.pack(fill="both", expand=True, padx=0, pady=(10,5))
+    p_text5 = tk.Text(p_frame5, wrap="word", width=60, height=5)
     p_text5.tag_configure("normal", font=("Arial", 10))
     p_text5.insert("1.0", "Results Will Display Here", "normal")
     p_text5.pack(padx=10, pady=10, side="left", fill="both", expand=True)
-
-    # Close button
-    btn = ttk.Button(popup, text="Close", command=popup.destroy)
-    btn.pack(pady=(0,10))
-    
+   
     # Center the popup over root
     popup.update_idletasks()
     w = popup.winfo_width()
@@ -985,6 +1081,7 @@ def show_load_dialog():
     x = (ws // 2) - (w // 2)
     y = (hs // 2) - (h // 2)
     popup.geometry(f"{w}x{h}+{x}+{y}")
+
     return
 
 class Tooltip:

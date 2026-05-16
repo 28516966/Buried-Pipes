@@ -12,10 +12,8 @@ The implemented calculation methodology is based upon the simplified method outl
 This method involves the calculation of vertical earth pressures using Boussinesq's formula for point loads (widely available in reference texts). The pressures for each point load comprising the vehicle loading are superimposed on a finite element grid (discretising space across x, y, depth) and the pressures averaged over a line of elements along a set length of pipe (recommended 1m).
 
 ## References
-British Standards Institution (2023). BS 9295 AMD 1. Guide to the Structural Design of Buried 
-    Pipelines.
-Nath, P. (1981). Pressures on Buried Pipes Due to Revised HB Loading.
-National Highways. (2025). CD 533 V1.2.0 Determination of pipe and bedding combinations for drainage 
-    works.
-Young, O.C. and O’Reilly, M.P. (1983). A Guide to Design Loadings for Buried Rigid Pipes.
-Young, O. and Trott, J. (1984). Buried Rigid Pipes. CRC Press.
+- British Standards Institution (2023). BS 9295 AMD 1. Guide to the Structural Design of Buried Pipelines.
+- Nath, P. (1981). Pressures on Buried Pipes Due to Revised HB Loading.
+- National Highways. (2025). CD 533 V1.2.0 Determination of pipe and bedding combinations for drainage works.
+- Young, O.C. and O’Reilly, M.P. (1983). A Guide to Design Loadings for Buried Rigid Pipes.
+- Young, O. and Trott, J. (1984). Buried Rigid Pipes. CRC Press.

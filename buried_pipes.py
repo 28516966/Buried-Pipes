@@ -772,14 +772,13 @@ def discretise_wheel(load, pressure, x=0, y=0, n=10, custom_wheel_mesh=None):
     """
     area = load / pressure
     r2 = (area / np.pi) ** 0.5
-    
     if n == 0: # Custom
         r1 = custom_wheel_mesh[0][0] * r2
         alpha0 = 2 * np.pi / custom_wheel_mesh[0][1]
         phase = custom_wheel_mesh[0][2]
         alpha = phase * alpha0
         result = []
-        a_sect = alpha0 * r1**2
+        a_sect = 0.5 * alpha0 * r1**2
         p_sect = a_sect / area * load
         r_sect = 2 * r1 * np.sin(alpha0) / (3 * alpha0)
         for i in range(0, custom_wheel_mesh[0][1]):
@@ -794,7 +793,7 @@ def discretise_wheel(load, pressure, x=0, y=0, n=10, custom_wheel_mesh=None):
             alpha0 = 2 * np.pi / ring[1]
             phase = ring[2]
             alpha = phase * alpha0
-            a_sect = alpha0 * (ro**2 - ri**2)
+            a_sect = 0.5 * alpha0 * (ro**2 - ri**2)
             p_sect = a_sect / area * load
             r_sect = 2 * np.sin(alpha0) * (ro**3 - ri**3) / (3 * alpha0 * (ro**2 - ri**2))
             for i in range(0, ring[1]):
@@ -1017,6 +1016,7 @@ def show_load_dialog():
         )
         x = res[:, 0]
         y = res[:, 1]
+        total_load = round(np.sum(res[:, 2]), 1)
         plot_frame = tk.Frame(scrollable_frame)
         plot_frame.pack(fill="both", expand=True)
         fig = Figure(figsize=(16,8))
@@ -1024,6 +1024,7 @@ def show_load_dialog():
         ax.plot(x, y, 'o', linestyle='') 
         ax.set_xlabel("x [m]")
         ax.set_ylabel("y [m]")
+        ax.set_title(f"Total Load {total_load}kN")
 
         margin = 0.5  # extra space around data
         xmin, xmax = x.min() - margin, x.max() + margin

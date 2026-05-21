@@ -1014,15 +1014,21 @@ def show_load_dialog():
         plt.close(fig)
         plot_canvas.get_tk_widget().destroy()
         plot_frame.destroy()
-        res = convert_patch_loads(
-            p_text5, 
-            ast.literal_eval(p_entry2.get()), 
-            float(p_entry3.get()), 
-            n=n.get(),
-            custom_wheel_mesh=ast.literal_eval(p_entry7.get())
-        )
-        x = res[:, 0]
-        y = res[:, 1]
+        # res = convert_patch_loads(
+        #     p_text5, 
+        #     ast.literal_eval(p_entry2.get()), 
+        #     float(p_entry3.get()), 
+        #     n=n.get(),
+        #     custom_wheel_mesh=ast.literal_eval(p_entry7.get())
+        # )
+        try:
+            res = np.asarray(ast.literal_eval(p_text5.get("1.0", tk.END)))
+            x = res[:, 0]
+            y = res[:, 1]
+        except:
+            p_text5.delete("1.0", tk.END)
+            p_text5.insert("1.0", "WARNING! Invalid data entered for plotting")
+            return
         total_load = round(np.sum(res[:, 2]), 1)
         plot_frame = tk.Frame(scrollable_frame)
         plot_frame.pack(fill="both", expand=True)

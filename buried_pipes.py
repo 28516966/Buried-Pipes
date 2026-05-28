@@ -830,7 +830,7 @@ def discretise_wheel(load, pressure, x=0, y=0, n=10, custom_wheel_mesh=None):
                 [x + x1_sect, y + y1_sect, p_sect], [x, y + r_sect, p_sect],
                 [x - x1_sect, y + y1_sect, p_sect], [x - x1_sect, y - y1_sect, p_sect],
                 [x, y - r_sect, p_sect], [x + x1_sect, y - y1_sect, p_sect]]
-    rounded = [[round(value, 3) for value in row] for row in result]
+    rounded = [[float(round(value, 3)) for value in row] for row in result]
     return rounded
 
 def convert_patch_loads(widget, wheel_loads, contact_pressure, n=10, custom_wheel_mesh=None):

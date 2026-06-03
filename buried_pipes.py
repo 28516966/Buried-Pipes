@@ -894,8 +894,10 @@ def show_load_dialog():
     p_frame1.pack(fill="both", expand=True, padx=10, pady=(10,5))
     p_text1 = tk.Text(p_frame1, wrap="word", width=60, height=20)
     p_text1.tag_configure("bold", font=("Arial", 10, "bold"))
+    p_text1.tag_configure("boldH1", font=("Arial", 12, "bold"))
     p_text1.tag_configure("normal", font=("Arial", 10))
-    p_text1.insert("1.0", "DMRB CD 533 Loading\n", "bold")
+    p_text1.insert("1.0", "Reference Vehicle Loading\n", "boldH1")
+    p_text1.insert("end", "DMRB CD 533 Loading\n", "bold")
     p_text1.insert("end", 
     "Main road loading - 45 units HB loading: static wheel of 112.5kN including impact factor of "\
     "1.25, contact pressure 1100kPa. Comprises eight wheels spread across two axles with wheel " \
@@ -946,54 +948,103 @@ def show_load_dialog():
     p_text1.config(yscrollcommand=p_scrollbar1.set)
     p_scrollbar1.pack(side="right", fill="y")
     
-    # Add inputs
+    # Add point load inputs
     p_frame2 = tk.Frame(p_mframe1)
     p_frame2.pack(fill="x", expand=True, padx=10, pady=(5,10))
-    tk.Label(p_frame2, text="Wheel loading to discretise:").pack(side="left")
+    tk.Label(p_frame2, text="Wheel point loading to discretise:").pack(side="left")
     p_entry2 = tk.Entry(p_frame2)
     p_entry2.pack(side="right", fill="x", expand=True, padx=5)
     p_entry2.insert(0, "[[-0.5, 0, 60], [0.5, 0, 60]]")
-    
+
     p_frame3 = tk.Frame(p_mframe1)
     p_frame3.pack(fill="x", expand=True, padx=10, pady=(5,10))
-    tk.Label(p_frame3, text="Contact pressure for wheels [kPa]").pack(side="left")
+    tk.Label(p_frame3, text="Contact pressure for wheels [kPa]:").pack(side="left")
     p_entry3 = tk.Entry(p_frame3, width=15)
     p_entry3.pack(side="right", padx=5)
     p_entry3.insert(0, "400")
+           
+    # Add combobox with discretisation options
+    p_frame10 = tk.Frame(p_mframe1)
+    p_frame10.pack(fill="x", expand=True, padx=10, pady=(5,10))
+    tk.Label(p_frame10, text="Discretise wheel load represented by circular contact patch into:").pack(side="left")
+    p_selected1 = tk.StringVar()
+    p_combobox1 = ttk.Combobox(
+        p_frame10, 
+        textvariable=p_selected1, 
+        values=["4 subdivisions", "10 subdivisions", 
+                "Custom user input"], 
+        width=50
+    )
+    p_combobox1.pack(side="right")
+    input_n = 10 # set default
+    n_dict = {
+        "4 subdivisions": 4,
+        "10 subdivisions": 10,
+        "Custom user input": 0,
+    }
 
-    p_frame6 = tk.Frame(p_mframe1)
-    p_frame6.pack(fill="x", expand=True, padx=10, pady=(5,5))
-    p_frame6a = tk.Frame(p_frame6)
-    p_frame6a.pack(side="left", fill="x")
-    p_frame6b = tk.Frame(p_frame6, width=15)
-    p_frame6b.pack(side="right", fill="x")
-    tk.Label(
-        p_frame6a, 
-        text="Number of points to discretise to \n" \
-        "4 total = 4 quadrants\n" \
-        "10 total = 4 inner quadrants + 6 outer annular sectors\n" \
-        "Custom = user-set number and weighting of radial divisions and angular divisions",
-        justify="left").pack(side="left")
-    n = tk.IntVar()
-    n.set(10)
-    p_rbutton6a = ttk.Radiobutton(p_frame6b, text="4", variable=n, value=4)
-    p_rbutton6a.pack(fill="x")
-    p_rbutton6b = ttk.Radiobutton(p_frame6b, text="10", variable=n, value=10)
-    p_rbutton6b.pack(fill="x")
-    p_rbutton6c = ttk.Radiobutton(p_frame6b, text="Custom", variable=n, value=0)
-    p_rbutton6c.pack(fill="x")
+    # Define frames associated with combobox 
+    p_frame11 = tk.Frame(p_mframe1)
+    p_frame11.pack(fill="x", expand=True)
 
-    p_frame7 = tk.Frame(p_mframe1)
-    p_frame7.pack(fill="x", expand=True, padx=10, pady=(0,10))
+    p_frame11_1 = tk.Frame(p_frame11)
+    p_frame11_2 = tk.Frame(p_frame11)
+    p_frame11_3 = tk.Frame(p_frame11)
+
+    p_frames1 = {
+    "4 subdivisions": p_frame11_1,
+    "10 subdivisions": p_frame11_2,
+    "Custom user input": p_frame11_3,
+    }
+
+    # Populate subframe details
     tk.Label(
-        p_frame7, 
+        p_frame11_1, 
+        text="Wheel load discretised into 4 quadrants", 
+        justify="left",
+        anchor="w"
+    ).pack(side="left", fill="x", expand=True)
+
+    tk.Label(
+        p_frame11_2, 
+        text="Wheel load discretised into 4 inner quadrants and 6 outer annular sectors", 
+        justify="left",
+        anchor="w"
+    ).pack(side="left", fill="x", expand=True)
+
+    tk.Label(
+        p_frame11_3, 
+        text="Wheel load discretised into user-set number of radial and angular subdivisions", 
+        justify="left",
+        anchor="w"
+    ).pack(fill="x", expand=True)
+    
+    tk.Label(
+        p_frame11_3, 
         text="[[inner ring radial weighting, angular subdivisions, phase], ... \n" \
         "[outer ring radial weighting, angular subdivisions, phase]]",
-        justify="left").pack(side="left")
-    p_entry7 = tk.Entry(p_frame7)
-    p_entry7.pack(side="right", fill="x", expand=True, padx=5)
-    p_entry7.insert(0, "[[0.4, 4, 0.5], [0.3, 6, 0.5], [0.3, 8, 0]]")
+        justify="left",
+        anchor="w"
+    ).pack(side="left", fill="x", expand=True)
+    p_entry11_3 = tk.Entry(p_frame11_3)
+    p_entry11_3.pack(side="right", fill="x", expand=True, padx=5)
+    p_entry11_3.insert(0, "[[0.4, 4, 0.5], [0.3, 6, 0.5], [0.3, 8, 0]]")
 
+    def show_frame(event=None):
+        # Hide all frames
+        for frame in p_frames1.values():
+            frame.pack_forget()
+
+        # Show selected frame (and set variable)
+        nonlocal input_n
+        input_n = n_dict[p_selected1.get()]
+        p_frames1[p_selected1.get()].pack(fill="both", padx=(15,0), expand=True)
+
+    p_combobox1.bind("<<ComboboxSelected>>", show_frame)
+    p_selected1.set("10 subdivisions")
+    show_frame()
+
+    # Solve and plot
     p_frame4 = tk.Frame(p_mframe1)
     p_frame4.pack(fill="x", expand=True, pady=2)
     p_button4 = tk.Button(p_frame4, text="Discretize wheel patch loading into set of n point " \
@@ -1001,8 +1052,8 @@ def show_load_dialog():
         p_text5, 
         ast.literal_eval(p_entry2.get()), 
         float(p_entry3.get()), 
-        n=n.get(),
-        custom_wheel_mesh=ast.literal_eval(p_entry7.get())
+        n=input_n,
+        custom_wheel_mesh=ast.literal_eval(p_entry11_3.get())
     ))
     p_button4.grid(row=0, column=0, sticky="ew")
     p_frame4.rowconfigure(0, weight=1)
@@ -1162,27 +1213,37 @@ mcanvas.configure(yscrollcommand=scrollbar.set)
 scrollframe = tk.Frame(mcanvas)
 mcanvas_frame = mcanvas.create_window((0, 0), window=scrollframe, anchor="nw")
 
+# Set up canvas and frame configurations
 def on_frame_configure(event):
     mcanvas.configure(scrollregion=mcanvas.bbox("all"))
 
 scrollframe.bind("<Configure>", on_frame_configure)
 
 def on_canvas_configure(event):
-    mcanvas.itemconfig(mcanvas_frame, width=event.width)
+    mcanvas.itemconfigure(mcanvas_frame, width=event.width)
 
 mcanvas.bind("<Configure>", on_canvas_configure)
+
+# Set up dynamic wrap length
+def update_wrap(event):
+    desc_label1.config(wraplength=event.width - 20)
+    desc_label2.config(wraplength=event.width - 20)
+    desc_label3.config(wraplength=event.width - 20)
+
+scrollframe.bind("<Configure>", update_wrap, add="+")
 
 # Title and description
 tk.Label(scrollframe, text="Traffic Pressures on Buried Pipes",
          font=("Arial", 12, "bold"), anchor="w", justify="left").pack(
              fill="x", padx=10, pady=(10,0))
 
-tk.Label(scrollframe,
+desc_label1 = tk.Label(scrollframe,
          text="Calculates traffic pressures using Boussinesq's equation and wheel loads "
               "idealised as point loads as described in Young and Trott's 'Buried Rigid Pipes "
               "Structural Design of Pipelines' (1984). This simplified approach neglects "
-              "consideration of pipe diameter, bedding, or tyre contact area.",
-         wraplength=620, justify="left", anchor="w").pack(fill="x", padx=10, pady=(0,10))
+              "consideration of pipe diameter, bedding, or tyre contact area.", 
+              justify="left", anchor="w")
+desc_label1.pack(fill="x", padx=10, pady=(0,10))
 
 # ==================================================================================================
 # Helper Functions for GUI Elements
@@ -1278,9 +1339,14 @@ row7 = create_row(mframe1,
 mframe2 = create_mframe(scrollframe)
 tk.Label(mframe2, text="Input - Wheel Loading", font=("Arial", 10, "bold"), anchor="w", 
          justify="left").pack(fill="x", pady=(0,5))
-tk.Label(mframe2, text="Input wheel loads as a system of dynamic point loads. Patch loading " \
-"can be approximated by discretising into a set of point loads.", wraplength=600, anchor="w",
-justify="left").pack(fill="x", pady=(0,5))
+desc_label2 = tk.Label(mframe2, text="Input wheel loads as a system of dynamic point loads. " \
+    "Note that this is an approximation, and in reality each wheel load is transmitted via a distributed contact " \
+    "pressure over a contact area. To produce less conservative results at shallow depths, each wheel contact patch " \
+    "can be further discretised into its own set of point loads.\n\n" \
+    "A utility is provided below within this program to enable discretisation of a wheel using its contact pressure " \
+    "and assuming a circular contact patch.",
+    wraplength=600, anchor="w", justify="left")
+desc_label2.pack(fill="x", pady=(0,5))
 
 frame16 = tk.Frame(mframe2)
 frame16.pack(fill="x", pady=2)
@@ -1310,12 +1376,13 @@ tk.Label(mframe3, text="Output - Results", font=("Arial", 10, "bold"), anchor="w
 
 frame11 = tk.Frame(mframe3)
 frame11.pack(fill="x", pady=2)
-tk.Label(frame11, text="Traffic surcharge, Ps, can be obtained by averaging pressures over a " \
+desc_label3=tk.Label(frame11, text="Traffic surcharge, Ps, can be obtained by averaging pressures over a " \
 "length of pipe (recommended 1m). Here, the greatest average pressure over a given length is " \
 "calculated for each depth using the row of elements along x closest to y = 0.", wraplength=600, 
-anchor="w", justify="left").pack(fill="x", pady=(0,5))
+anchor="w", justify="left")
+desc_label3.pack(fill="x", pady=(0,5))
 row12 = create_row(mframe3,
-                    "Length of pipe over which to average pressures:",
+                    "Length of pipe over which to average pressure:",
                     "0.9 - 1.0m is recommended",
                     "m")
 
@@ -1494,3 +1561,11 @@ row12.insert(0, "1")
 
 # Create root window
 root.mainloop()
+
+# To Do
+# 01 - Make root window text expand with window
+# 02 - Clarify all references to wheel discretisation based on tyre pressure
+# 03 - Rename popup window according to above
+# 04 - Title "Reference Wheel Loading" or similar - perhaps a show/hide feature?
+# 05 - Make wheel discretisation options properly aligned with labels
+# 06 - Add ability to save results from reference loads saved in software
